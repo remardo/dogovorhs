@@ -27,10 +27,12 @@ export const getSummary = query({
     ? await db.query("expenses").withIndex("by_month", (q) => q.eq("month", latestExpenseMonth)).collect()
     : [];
   const latestMonthTotalByCompany = new Map<string, number>();
+  const getExpenseTotal = (expense: { amount: number; vat?: number; total?: number }) =>
+    expense.total ?? expense.amount + (expense.vat ?? 0);
   for (const expense of latestMonthExpenses) {
     latestMonthTotalByCompany.set(
       `${expense.companyId}`,
-      (latestMonthTotalByCompany.get(`${expense.companyId}`) ?? 0) + expense.amount,
+      (latestMonthTotalByCompany.get(`${expense.companyId}`) ?? 0) + getExpenseTotal(expense),
     );
   }
 
@@ -55,8 +57,9 @@ export const getSummary = query({
     (acc, expense) => {
       const month = expense.month;
       const companyName = companyNameById.get(expense.companyId) ?? "Компания";
+      const total = getExpenseTotal(expense);
       monthMeta[month] = {
-        total: (monthMeta[month]?.total ?? 0) + expense.amount,
+        total: (monthMeta[month]?.total ?? 0) + total,
         lastCreated: Math.max(monthMeta[month]?.lastCreated ?? 0, expense.createdAt),
       };
       if (!acc[month]) {
@@ -65,12 +68,12 @@ export const getSummary = query({
       const monthEntry = acc[month];
       const existing = monthEntry.companies.find((c) => c.companyId === expense.companyId);
       if (existing) {
-        existing.amount += expense.amount;
+        existing.amount += total;
       } else {
         monthEntry.companies.push({
           companyId: `${expense.companyId}`,
           company: companyName,
-          amount: expense.amount,
+          amount: total,
         });
       }
       return acc;
@@ -97,7 +100,7 @@ export const getSummary = query({
   const serviceTypes: Record<string, number> = {};
   for (const expense of expenses) {
     if (monthsSorted.length && !monthsSorted.includes(expense.month)) continue;
-    serviceTypes[expense.type] = (serviceTypes[expense.type] ?? 0) + expense.amount;
+    serviceTypes[expense.type] = (serviceTypes[expense.type] ?? 0) + getExpenseTotal(expense);
   }
   const services = Object.entries(serviceTypes).map(([name, value]) => ({ name, value }));
 

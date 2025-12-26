@@ -35,10 +35,12 @@ export const list = query(async (ctx) => {
       .query("expenses")
       .withIndex("by_month", (q) => q.eq("month", latestExpenseMonth))
       .collect();
+    const getExpenseTotal = (expense: { amount: number; vat?: number; total?: number }) =>
+      expense.total ?? expense.amount + (expense.vat ?? 0);
     for (const expense of latestMonthExpenses) {
       expensesByCompany.set(
         `${expense.companyId}`,
-        (expensesByCompany.get(`${expense.companyId}`) ?? 0) + expense.amount,
+        (expensesByCompany.get(`${expense.companyId}`) ?? 0) + getExpenseTotal(expense),
       );
     }
   }
