@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useContracts, type Contract } from "@/lib/backend";
+import { useContracts, useSimCards, type Contract, type SimCard } from "@/lib/backend";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -48,6 +48,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 const Contracts = () => {
   const { items: contracts, companies, operators, createContract, updateContract, deleteContract } = useContracts();
+  const { items: simCards } = useSimCards();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [viewContract, setViewContract] = useState<Contract | null>(null);
@@ -119,6 +120,13 @@ const Contracts = () => {
       return matchesSearch && matchesCompany && matchesOperator && matchesStatus;
     });
   }, [contracts, search, companyFilter, operatorFilter, statusFilter]);
+
+  const contractSimCards = React.useMemo(() => {
+    if (!viewContract) return [] as SimCard[];
+    return simCards.filter(
+      (sim) => sim.companyId === viewContract.companyId && sim.operatorId === viewContract.operatorId,
+    );
+  }, [simCards, viewContract]);
 
   return (
     <MainLayout
@@ -374,7 +382,11 @@ const Contracts = () => {
           </thead>
           <tbody>
             {filteredContracts.map((contract) => (
-              <tr key={contract.id}>
+              <tr
+                key={contract.id}
+                className="cursor-pointer"
+                onClick={() => setViewContract(contract)}
+              >
                 <td>
                   <div className="flex items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -399,7 +411,12 @@ const Contracts = () => {
                 <td>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -451,56 +468,90 @@ const Contracts = () => {
 
       {/* Просмотр */}
       <Dialog open={!!viewContract} onOpenChange={(open) => !open && setViewContract(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Просмотр договора</DialogTitle>
             <DialogDescription>Информация по договору.</DialogDescription>
           </DialogHeader>
           {viewContract && (
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Номер</span>
-                <span className="font-medium">{viewContract.number}</span>
+            <div className="space-y-6 text-sm">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Номер</span>
+                  <span className="font-medium">{viewContract.number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Компания</span>
+                  <span className="font-medium">{viewContract.company}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Оператор</span>
+                  <span className="font-medium">{viewContract.operator}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Тип</span>
+                  <span className="font-medium">{viewContract.type}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Статус</span>
+                  <span className="font-medium">
+                    {viewContract.status === "active" ? "Активен" : "На расторжении"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Начало</span>
+                  <span className="font-medium">{viewContract.startDate || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Окончание</span>
+                  <span className="font-medium">{viewContract.endDate || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Абонплата</span>
+                  <span className="font-medium">{viewContract.monthlyFee.toLocaleString("ru-RU")} ?</span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Компания</span>
-                <span className="font-medium">{viewContract.company}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Оператор</span>
-                <span className="font-medium">{viewContract.operator}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Тип</span>
-                <span className="font-medium">{viewContract.type}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Статус</span>
-                <span className="font-medium">
-                  {viewContract.status === "active" ? "Активен" : "На расторжении"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Начало</span>
-                <span className="font-medium">{viewContract.startDate || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Окончание</span>
-                <span className="font-medium">{viewContract.endDate || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Абонплата</span>
-                <span className="font-medium">{viewContract.monthlyFee.toLocaleString("ru-RU")} ₽</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">SIM</span>
-                <span className="font-medium">{viewContract.simCount}</span>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Подключенные SIM-карты</div>
+                  <div className="text-xs text-muted-foreground">Найдено: {contractSimCards.length}</div>
+                </div>
+                {contractSimCards.length ? (
+                  <div className="max-h-72 overflow-auto rounded-md border border-border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/40 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Номер</th>
+                          <th className="px-3 py-2 text-left font-medium">Тариф</th>
+                          <th className="px-3 py-2 text-left font-medium">Статус</th>
+                          <th className="px-3 py-2 text-left font-medium">Сотрудник</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {contractSimCards.map((sim) => (
+                          <tr key={sim.id} className="border-t border-border">
+                            <td className="px-3 py-2">{sim.number}</td>
+                            <td className="px-3 py-2">{sim.tariff || sim.type || "-"}</td>
+                            <td className="px-3 py-2">
+                              {sim.status === "active" ? "Активна" : "Заблокирована"}
+                            </td>
+                            <td className="px-3 py-2">{sim.employee || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                    SIM-карты не найдены для этого договора.
+                  </div>
+                )}
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
-
       {/* Редактирование */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-2xl">
