@@ -21,6 +21,11 @@ dist/
 dist-ssr/
 coverage/
 
+# Local reports
+*.xls
+*.xlsx
+*.csv
+
 # Convex
 convex/_generated/
 .convex/
