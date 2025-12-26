@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "@/components/ui/sonner";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { backendAvailable, convexClient } from "./client";
 
@@ -153,6 +154,23 @@ export type SimCard = {
   tariff?: string;
   limit?: number;
 };
+
+const fallbackNotices = new Set<string>();
+
+function notifyFallbackOnce(key: string, title: string, description: string) {
+  if (typeof window === "undefined") return;
+  if (fallbackNotices.has(key)) return;
+  fallbackNotices.add(key);
+  toast(title, { description });
+}
+
+function notifyDemoMode() {
+  notifyFallbackOnce("backend-demo", "Демо-режим", "Бэкенд не подключен. Изменения сохраняются только локально.");
+}
+
+function notifyBackendError() {
+  notifyFallbackOnce("backend-offline", "Нет связи с бэкендом", "Изменения сохранены локально и не попадут в Convex.");
+}
 
 const demoDashboard: DashboardData = {
   summary: {
@@ -615,12 +633,25 @@ export function useDashboardData(): DashboardData {
       }
     };
 
+    const poll = () => {
+      if (document.visibilityState !== "visible") return;
+      fetchData();
+    };
+
     fetchData();
-    const interval = setInterval(fetchData, 30_000);
+    const interval = window.setInterval(poll, 30_000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchData();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       cancelled = true;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
@@ -692,6 +723,7 @@ export function useEmployeesWithMutations() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       addLocal();
       return;
     }
@@ -710,6 +742,7 @@ export function useEmployeesWithMutations() {
       setData(res as Employee[]);
     } catch (err) {
       console.warn("employees:create fallback to local demo data", err);
+      notifyBackendError();
       addLocal();
     }
   };
@@ -720,6 +753,7 @@ export function useEmployeesWithMutations() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       addLocal();
       return;
     }
@@ -739,6 +773,7 @@ export function useEmployeesWithMutations() {
       setData(res as Employee[]);
     } catch (err) {
       console.warn("employees:update fallback to local demo data", err);
+      notifyBackendError();
       addLocal();
     }
   };
@@ -746,6 +781,7 @@ export function useEmployeesWithMutations() {
   const deleteEmployee = async (id: string) => {
     const removeLocal = () => setData((prev) => prev.filter((e) => e.id !== id));
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       removeLocal();
       return;
     }
@@ -755,6 +791,7 @@ export function useEmployeesWithMutations() {
       setData(res as Employee[]);
     } catch (err) {
       console.warn("employees:remove fallback to local demo data", err);
+      notifyBackendError();
       removeLocal();
     }
   };
@@ -817,6 +854,7 @@ export function useContracts() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       fallbackAdd();
       return;
     }
@@ -838,6 +876,7 @@ export function useContracts() {
     } catch (err) {
       // Если Convex недоступен или ошибка валидации (например, демо-ID), падаем в демо-режим
       console.warn("contracts:create fallback to local demo data", err);
+      notifyBackendError();
       fallbackAdd();
     }
   };
@@ -851,6 +890,7 @@ export function useContracts() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       addLocal();
       return;
     }
@@ -872,6 +912,7 @@ export function useContracts() {
       setData(res as typeof data);
     } catch (err) {
       console.warn("contracts:update fallback to local demo data", err);
+      notifyBackendError();
       addLocal();
     }
   };
@@ -882,6 +923,7 @@ export function useContracts() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       removeLocal();
       return;
     }
@@ -894,6 +936,7 @@ export function useContracts() {
       setData(res as typeof data);
     } catch (err) {
       console.warn("contracts:remove fallback to local demo data", err);
+      notifyBackendError();
       removeLocal();
     }
   };
@@ -931,6 +974,7 @@ export function useOperators() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       addLocal();
       return;
     }
@@ -947,6 +991,7 @@ export function useOperators() {
       setItems(res as Operator[]);
     } catch (err) {
       console.warn("operators:create fallback to local demo data", err);
+      notifyBackendError();
       addLocal();
     }
   };
@@ -954,6 +999,7 @@ export function useOperators() {
   const deleteOperator = async (id: string) => {
     const removeLocal = () => setItems((prev) => prev.filter((o) => o.id !== id));
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       removeLocal();
       return;
     }
@@ -963,6 +1009,7 @@ export function useOperators() {
       setItems(res as Operator[]);
     } catch (err) {
       console.warn("operators:remove fallback to local demo data", err);
+      notifyBackendError();
       removeLocal();
     }
   };
@@ -1007,6 +1054,7 @@ export function useCompanies() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       addLocal();
       return;
     }
@@ -1022,6 +1070,7 @@ export function useCompanies() {
       setItems(res as Company[]);
     } catch (err) {
       console.warn("companies:create fallback to local demo data", err);
+      notifyBackendError();
       addLocal();
     }
   };
@@ -1029,6 +1078,7 @@ export function useCompanies() {
   const deleteCompany = async (id: string) => {
     const removeLocal = () => setItems((prev) => prev.filter((c) => c.id !== id));
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       removeLocal();
       return;
     }
@@ -1038,6 +1088,7 @@ export function useCompanies() {
       setItems(res as Company[]);
     } catch (err) {
       console.warn("companies:remove fallback to local demo data", err);
+      notifyBackendError();
       removeLocal();
     }
   };
@@ -1082,6 +1133,7 @@ export function useTariffs() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       addLocal();
       return;
     }
@@ -1100,6 +1152,7 @@ export function useTariffs() {
       setData(res as typeof data);
     } catch (err) {
       console.warn("tariffs:create fallback to local demo data", err);
+      notifyBackendError();
       addLocal();
     }
   };
@@ -1107,6 +1160,7 @@ export function useTariffs() {
   const deleteTariff = async (id: string) => {
     const removeLocal = () => setData((prev) => ({ ...prev, items: prev.items.filter((t) => t.id !== id) }));
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       removeLocal();
       return;
     }
@@ -1116,6 +1170,7 @@ export function useTariffs() {
       setData(res as typeof data);
     } catch (err) {
       console.warn("tariffs:remove fallback to local demo data", err);
+      notifyBackendError();
       removeLocal();
     }
   };
@@ -1169,6 +1224,7 @@ export function useExpenses() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       addLocal();
       return;
     }
@@ -1190,6 +1246,7 @@ export function useExpenses() {
       setData(res as typeof data);
     } catch (err) {
       console.warn("expenses:create fallback to local demo data", err);
+      notifyBackendError();
       addLocal();
     }
   };
@@ -1209,6 +1266,7 @@ export function useExpenses() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       addLocal();
       return;
     }
@@ -1231,17 +1289,40 @@ export function useExpenses() {
       setData(res as typeof data);
     } catch (err) {
       console.warn("expenses:update fallback to local demo data", err);
+      notifyBackendError();
       addLocal();
     }
   };
 
   const deleteExpense = async (id: string) => {
+    const removeLocal = () => {
+      setData((prev) => {
+        const items = prev.items.filter((e) => e.id !== id);
+        const summary = {
+          total: items.reduce((s, e) => s + e.total, 0),
+          confirmed: items.filter((e) => e.status === "confirmed").reduce((s, e) => s + e.total, 0),
+          draft: items.filter((e) => e.status === "draft").reduce((s, e) => s + e.total, 0),
+          noDocs: items.filter((e) => !e.hasDocument).length,
+        };
+        return { ...prev, items, summary };
+      });
+    };
+
     if (!convexClient || !backendAvailable) {
-      throw new Error("Удаление доступно только с подключенным бэкендом");
+      notifyDemoMode();
+      removeLocal();
+      return;
     }
-    await convexClient.mutation("expenses:remove", { id: id as Id<"expenses"> });
-    const res = await convexClient.query("expenses:list", {});
-    setData(res as typeof data);
+
+    try {
+      await convexClient.mutation("expenses:remove", { id: id as Id<"expenses"> });
+      const res = await convexClient.query("expenses:list", {});
+      setData(res as typeof data);
+    } catch (err) {
+      console.warn("expenses:remove fallback to local demo data", err);
+      notifyBackendError();
+      removeLocal();
+    }
   };
 
   return { ...data, createExpense, updateExpense, deleteExpense };
@@ -1291,6 +1372,7 @@ export function useSimCards() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       addLocal();
       return;
     }
@@ -1311,6 +1393,7 @@ export function useSimCards() {
       setData(res as typeof data);
     } catch (err) {
       console.warn("simCards:create fallback to local demo data", err);
+      notifyBackendError();
       addLocal();
     }
   };
@@ -1324,6 +1407,7 @@ export function useSimCards() {
     };
 
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       addLocal();
       return;
     }
@@ -1345,6 +1429,7 @@ export function useSimCards() {
       setData(res as typeof data);
     } catch (err) {
       console.warn("simCards:update fallback to local demo data", err);
+      notifyBackendError();
       addLocal();
     }
   };
@@ -1352,6 +1437,7 @@ export function useSimCards() {
   const deleteSimCard = async (id: string) => {
     const removeLocal = () => setData((prev) => ({ ...prev, items: prev.items.filter((s) => s.id !== id) }));
     if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
       removeLocal();
       return;
     }
@@ -1361,6 +1447,7 @@ export function useSimCards() {
       setData(res as typeof data);
     } catch (err) {
       console.warn("simCards:remove fallback to local demo data", err);
+      notifyBackendError();
       removeLocal();
     }
   };

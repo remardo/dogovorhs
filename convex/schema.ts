@@ -99,4 +99,31 @@ export default defineSchema({
     .index("by_created", ["createdAt"])
     .index("by_month", ["month"])
     .index("by_company_month", ["companyId", "month"]),
+
+  billingImports: defineTable({
+    fileId: v.id("_storage"),
+    fileName: v.string(),
+    status: v.string(),
+    createdAt: v.number(),
+    appliedAt: v.optional(v.number()),
+    previewSummary: v.optional(
+      v.object({
+        rows: v.number(),
+        contractsMissing: v.number(),
+        simCardsMissing: v.number(),
+        tariffsMissing: v.number(),
+        totalAmount: v.number(),
+        totalVat: v.number(),
+        totalTotal: v.number(),
+      }),
+    ),
+    appliedSummary: v.optional(
+      v.object({
+        expensesCreated: v.number(),
+        simCardsCreated: v.number(),
+        tariffsCreated: v.number(),
+        contractsCreated: v.number(),
+      }),
+    ),
+  }),
 });

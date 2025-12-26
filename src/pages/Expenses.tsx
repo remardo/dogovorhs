@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { useExpenses, useCompanies, useContracts, type Expense } from "@/lib/backend";
+import { convexClient, useCompanies, useContracts, useExpenses, useOperators, type Expense } from "@/lib/backend";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -43,6 +43,69 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+type ImportPreview = {
+  importId: string;
+  fileName: string;
+  totals: {
+    rows: number;
+    contractsMissing: number;
+    simCardsMissing: number;
+    tariffsMissing: number;
+    totalAmount: number;
+    totalVat: number;
+    totalTotal: number;
+  };
+  missingContracts: {
+    contractNumber: string;
+    rowsCount: number;
+    periodStart: string;
+    periodEnd: string;
+  }[];
+  missingSimCards: {
+    phone: string;
+    contractNumber: string;
+    tariffName: string;
+  }[];
+  missingTariffs: {
+    operatorId: string;
+    operatorName: string;
+    contractNumber: string;
+    tariffName: string;
+  }[];
+};
+
+type ContractResolutionState = {
+  contractNumber: string;
+  companyMode: "existing" | "create";
+  companyId?: string;
+  companyName?: string;
+  companyInn?: string;
+  companyKpp?: string;
+  companyComment?: string;
+  operatorMode: "existing" | "create";
+  operatorId?: string;
+  operatorName?: string;
+  operatorType?: string;
+  operatorManager?: string;
+  operatorPhone?: string;
+  operatorEmail?: string;
+  type: string;
+  status: "active" | "closing";
+  startDate: string;
+  endDate: string;
+  monthlyFee: number;
+  simCount: number;
+  forceCreate?: boolean;
+};
+
+type CompanyConflict = {
+  contractNumber: string;
+  name: string;
+  suggestions: { id: string; name: string }[];
+};
+
+type SimAction = "create" | "skip";
+
 const getStatusBadge = (status: string) => {
   switch (status) {
     case "confirmed":
@@ -60,6 +123,7 @@ const Expenses = () => {
   const { items: expenses, createExpense, updateExpense, deleteExpense } = useExpenses();
   const { items: companies } = useCompanies();
   const { items: contracts } = useContracts();
+  const { items: operators } = useOperators();
   const [open, setOpen] = React.useState(false);
   const [viewExpense, setViewExpense] = React.useState<Expense | null>(null);
   const [editExpense, setEditExpense] = React.useState<Expense | null>(null);
@@ -70,6 +134,15 @@ const Expenses = () => {
   const [periodFilter, setPeriodFilter] = React.useState("all");
   const [contractSelect, setContractSelect] = React.useState("__custom");
   const [editContractSelect, setEditContractSelect] = React.useState("__custom");
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [importBusy, setImportBusy] = React.useState(false);
+  const [importFile, setImportFile] = React.useState<File | null>(null);
+  const [importPreview, setImportPreview] = React.useState<ImportPreview | null>(null);
+  const [importId, setImportId] = React.useState<string | null>(null);
+  const [contractResolutions, setContractResolutions] = React.useState<ContractResolutionState[]>([]);
+  const [simActionMap, setSimActionMap] = React.useState<Record<string, SimAction>>({});
+  const [tariffOverrides, setTariffOverrides] = React.useState<Record<string, number>>({});
+  const [companyConflicts, setCompanyConflicts] = React.useState<CompanyConflict[] | null>(null);
   const today = React.useMemo(() => new Date(), []);
   const defaultRange: DateRange = { from: today, to: today };
   const [createRange, setCreateRange] = React.useState<DateRange | undefined>(defaultRange);
@@ -80,7 +153,119 @@ const Expenses = () => {
     const fromStr = format(range.from, "dd.MM.yyyy");
     if (!range.to) return fromStr;
     const toStr = format(range.to, "dd.MM.yyyy");
-    return fromStr === toStr ? fromStr : `${fromStr} — ${toStr}`;
+    return fromStr === toStr ? fromStr : `${fromStr} - ${toStr}`;
+  };
+
+  const updateResolution = (contractNumber: string, updater: (item: ContractResolutionState) => ContractResolutionState) => {
+    setContractResolutions((prev) =>
+      prev.map((item) => (item.contractNumber === contractNumber ? updater(item) : item)),
+    );
+  };
+
+  const handleImportPreview = async () => {
+    if (!convexClient) {
+      toast({ title: "Бэкенд недоступен", description: "Подключите Convex и повторите попытку." });
+      return;
+    }
+    if (!importFile) {
+      toast({ title: "Выберите файл", description: "Нужен XLS/XLSX/CSV файл детализации." });
+      return;
+    }
+    setImportBusy(true);
+    try {
+      const { uploadUrl } = await convexClient.mutation("billingImports:requestUpload", {});
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": importFile.type || "application/octet-stream",
+        },
+        body: importFile,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error("Не удалось загрузить файл");
+      }
+      const { storageId } = await uploadResponse.json();
+      const saved = await convexClient.mutation("billingImports:saveUpload", {
+        fileId: storageId,
+        fileName: importFile.name,
+      });
+      setImportId(saved.importId as string);
+      const preview = await convexClient.mutation("billingImports:preview", { id: saved.importId });
+      setImportPreview(preview as ImportPreview);
+      setCompanyConflicts(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Ошибка импорта";
+      toast({ title: "Импорт не выполнен", description: message });
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const handleImportApply = async () => {
+    if (!convexClient || !importId || !importPreview) return;
+    setImportBusy(true);
+    try {
+      const payload = {
+        id: importId,
+        contractResolutions: contractResolutions.map((item) => ({
+          contractNumber: item.contractNumber,
+          company:
+            item.companyMode === "existing"
+              ? { mode: "existing" as const, id: item.companyId }
+              : {
+                  mode: "create" as const,
+                  name: item.companyName || "",
+                  inn: item.companyInn || undefined,
+                  kpp: item.companyKpp || undefined,
+                  comment: item.companyComment || undefined,
+                  forceCreate: item.forceCreate || false,
+                },
+          operator:
+            item.operatorMode === "existing"
+              ? { mode: "existing" as const, id: item.operatorId }
+              : {
+                  mode: "create" as const,
+                  name: item.operatorName || "",
+                  type: item.operatorType || undefined,
+                  manager: item.operatorManager || undefined,
+                  phone: item.operatorPhone || undefined,
+                  email: item.operatorEmail || undefined,
+                },
+          type: item.type,
+          status: item.status,
+          startDate: item.startDate,
+          endDate: item.endDate,
+          monthlyFee: item.monthlyFee,
+          simCount: item.simCount,
+        })),
+        simCardActions: importPreview.missingSimCards.map((item) => ({
+          phone: item.phone,
+          action: simActionMap[item.phone] ?? "create",
+        })),
+        tariffOverrides: importPreview.missingTariffs.map((item) => ({
+          operatorId: item.operatorId,
+          tariffName: item.tariffName,
+          monthlyFee: tariffOverrides[`${item.operatorId}:${item.tariffName}`] || undefined,
+        })),
+      };
+      const result = await convexClient.mutation("billingImports:apply", payload);
+      if (result?.status === "needs_confirmation") {
+        setCompanyConflicts(result.companyConflicts as CompanyConflict[]);
+        toast({ title: "Нужно подтвердить компании", description: "Выберите существующую или создайте новую." });
+        return;
+      }
+      if (result?.status === "missing_contracts") {
+        toast({ title: "Не хватает договоров", description: "Заполните данные для всех договоров." });
+        return;
+      }
+      toast({ title: "Импорт применен", description: "Данные добавлены в расходы." });
+      setImportOpen(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Ошибка применения импорта";
+      toast({ title: "Импорт не применен", description: message });
+    } finally {
+      setImportBusy(false);
+    }
   };
 
   const form = useForm<FormValues>({
@@ -170,6 +355,60 @@ const Expenses = () => {
     }
   }, [editContractSelect, contracts, editForm]);
 
+  React.useEffect(() => {
+    if (!importOpen) {
+      setImportFile(null);
+      setImportPreview(null);
+      setImportId(null);
+      setContractResolutions([]);
+      setSimActionMap({});
+      setTariffOverrides({});
+      setCompanyConflicts(null);
+    }
+  }, [importOpen]);
+
+  React.useEffect(() => {
+    if (!importPreview) return;
+    const defaultCompanyId = companies[0]?.id ?? "";
+    const defaultOperatorId = operators[0]?.id ?? "";
+    setContractResolutions(
+      importPreview.missingContracts.map((item) => ({
+        contractNumber: item.contractNumber,
+        companyMode: companies.length ? "existing" : "create",
+        companyId: companies.length ? defaultCompanyId : "",
+        companyName: "",
+        companyInn: "",
+        companyKpp: "",
+        companyComment: "",
+        operatorMode: operators.length ? "existing" : "create",
+        operatorId: operators.length ? defaultOperatorId : "",
+        operatorName: "",
+        operatorType: "",
+        operatorManager: "",
+        operatorPhone: "",
+        operatorEmail: "",
+        type: "Мобильная связь",
+        status: "active",
+        startDate: item.periodStart || "",
+        endDate: item.periodEnd || "",
+        monthlyFee: 0,
+        simCount: 0,
+      })),
+    );
+
+    const actions: Record<string, SimAction> = {};
+    importPreview.missingSimCards.forEach((item) => {
+      actions[item.phone] = "create";
+    });
+    setSimActionMap(actions);
+
+    const overrides: Record<string, number> = {};
+    importPreview.missingTariffs.forEach((item) => {
+      overrides[`${item.operatorId}:${item.tariffName}`] = 0;
+    });
+    setTariffOverrides(overrides);
+  }, [importPreview, companies, operators]);
+
   const onEditSubmit = async (values: FormValues) => {
     if (!editExpense) return;
     editForm.setValue("month", formatRange(editRange, editExpense.month));
@@ -208,16 +447,434 @@ const Expenses = () => {
     );
   }, [filteredExpenses]);
 
+  const canApplyImport = React.useMemo(() => {
+    if (!importPreview) return false;
+    if (importPreview.missingContracts.length !== contractResolutions.length) return false;
+    return contractResolutions.every((item) => {
+      const companyOk =
+        item.companyMode === "existing" ? Boolean(item.companyId) : Boolean(item.companyName?.trim());
+      const operatorOk =
+        item.operatorMode === "existing" ? Boolean(item.operatorId) : Boolean(item.operatorName?.trim());
+      const contractOk = Boolean(item.type.trim()) && Boolean(item.startDate.trim()) && Boolean(item.endDate.trim());
+      return companyOk && operatorOk && contractOk;
+    });
+  }, [importPreview, contractResolutions]);
+
   return (
     <MainLayout
       title="Фактические расходы"
       subtitle="Учёт ежемесячных расходов по договорам"
       actions={
         <div className="flex gap-3">
-          <Button variant="outline">
-            <Upload className="h-4 w-4 mr-2" />
-            Импорт
-          </Button>
+          <Dialog open={importOpen} onOpenChange={setImportOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Импорт
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-5xl">
+              <DialogHeader>
+                <DialogTitle>Импорт расходов</DialogTitle>
+                <DialogDescription>Загрузите XLS/XLSX/CSV и подтвердите данные перед применением.</DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-3">
+                    <Input
+                      type="file"
+                      accept=".xls,.xlsx,.csv"
+                      onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button onClick={handleImportPreview} disabled={importBusy || !importFile}>
+                        {importBusy ? "Загрузка..." : "Предпросмотр"}
+                      </Button>
+                      {importFile && <span className="text-xs text-muted-foreground">{importFile.name}</span>}
+                    </div>
+                  </div>
+
+                  {importPreview && (
+                    <div className="rounded-lg border border-border bg-muted/20 p-4 text-sm">
+                      <div className="font-medium">Итоги файла</div>
+                      <div className="mt-2 space-y-1 text-muted-foreground">
+                        <div>Строк: {importPreview.totals.rows}</div>
+                        <div>Сумма без НДС: {importPreview.totals.totalAmount.toLocaleString("ru-RU")} ₽</div>
+                        <div>НДС: {importPreview.totals.totalVat.toLocaleString("ru-RU")} ₽</div>
+                        <div>Итого: {importPreview.totals.totalTotal.toLocaleString("ru-RU")} ₽</div>
+                        <div>Нет договоров: {importPreview.totals.contractsMissing}</div>
+                        <div>Нет SIM: {importPreview.totals.simCardsMissing}</div>
+                        <div>Нет тарифов: {importPreview.totals.tariffsMissing}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {companyConflicts?.length ? (
+                  <div className="rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm">
+                    <div className="font-medium">Похожие компании</div>
+                    <div className="mt-2 space-y-3">
+                      {companyConflicts.map((conflict) => (
+                        <div key={conflict.contractNumber} className="space-y-2">
+                          <div className="text-muted-foreground">
+                            Договор {conflict.contractNumber}: найдено похожее название «{conflict.name}».
+                          </div>
+                          <Select
+                            value={
+                              contractResolutions.find((r) => r.contractNumber === conflict.contractNumber)?.companyMode ===
+                              "existing"
+                                ? contractResolutions.find((r) => r.contractNumber === conflict.contractNumber)?.companyId ??
+                                  ""
+                                : "__new"
+                            }
+                            onValueChange={(value) => {
+                              updateResolution(conflict.contractNumber, (item) => ({
+                                ...item,
+                                companyMode: value === "__new" ? "create" : "existing",
+                                companyId: value === "__new" ? "" : value,
+                                forceCreate: value === "__new",
+                              }));
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Выберите компанию" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {conflict.suggestions.map((s) => (
+                                <SelectItem key={s.id} value={s.id}>
+                                  Объединить с: {s.name}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="__new">Создать новую компанию</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {importPreview && (
+                  <div className="space-y-6">
+                    {importPreview.missingContracts.length ? (
+                      <div className="space-y-4">
+                        <div className="text-sm font-medium">Договоры (нужно заполнить)</div>
+                        <div className="space-y-4">
+                          {contractResolutions.map((item) => (
+                            <div key={item.contractNumber} className="rounded-lg border border-border p-4">
+                              <div className="mb-4 text-sm font-medium">Договор {item.contractNumber}</div>
+                              <div className="grid gap-3 md:grid-cols-2">
+                                <div className="space-y-2">
+                                  <div className="text-xs text-muted-foreground">Компания</div>
+                                  <Select
+                                    value={item.companyMode === "existing" ? item.companyId ?? "" : "__new"}
+                                    onValueChange={(value) =>
+                                      updateResolution(item.contractNumber, (prev) => ({
+                                        ...prev,
+                                        companyMode: value === "__new" ? "create" : "existing",
+                                        companyId: value === "__new" ? "" : value,
+                                        forceCreate: false,
+                                      }))
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Компания" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {companies.map((company) => (
+                                        <SelectItem key={company.id} value={company.id}>
+                                          {company.name}
+                                        </SelectItem>
+                                      ))}
+                                      <SelectItem value="__new">Создать новую</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  {item.companyMode === "create" && (
+                                    <div className="space-y-2">
+                                      <Input
+                                        placeholder="Название компании"
+                                        value={item.companyName ?? ""}
+                                        onChange={(event) =>
+                                          updateResolution(item.contractNumber, (prev) => ({
+                                            ...prev,
+                                            companyName: event.target.value,
+                                          }))
+                                        }
+                                      />
+                                      <div className="grid gap-2 md:grid-cols-2">
+                                        <Input
+                                          placeholder="ИНН"
+                                          value={item.companyInn ?? ""}
+                                          onChange={(event) =>
+                                            updateResolution(item.contractNumber, (prev) => ({
+                                              ...prev,
+                                              companyInn: event.target.value,
+                                            }))
+                                          }
+                                        />
+                                        <Input
+                                          placeholder="КПП"
+                                          value={item.companyKpp ?? ""}
+                                          onChange={(event) =>
+                                            updateResolution(item.contractNumber, (prev) => ({
+                                              ...prev,
+                                              companyKpp: event.target.value,
+                                            }))
+                                          }
+                                        />
+                                      </div>
+                                      <Input
+                                        placeholder="Комментарий"
+                                        value={item.companyComment ?? ""}
+                                        onChange={(event) =>
+                                          updateResolution(item.contractNumber, (prev) => ({
+                                            ...prev,
+                                            companyComment: event.target.value,
+                                          }))
+                                        }
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="text-xs text-muted-foreground">Оператор</div>
+                                  <Select
+                                    value={item.operatorMode === "existing" ? item.operatorId ?? "" : "__new"}
+                                    onValueChange={(value) =>
+                                      updateResolution(item.contractNumber, (prev) => ({
+                                        ...prev,
+                                        operatorMode: value === "__new" ? "create" : "existing",
+                                        operatorId: value === "__new" ? "" : value,
+                                      }))
+                                    }
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Оператор" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {operators.map((operator) => (
+                                        <SelectItem key={operator.id} value={operator.id}>
+                                          {operator.name}
+                                        </SelectItem>
+                                      ))}
+                                      <SelectItem value="__new">Создать нового</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  {item.operatorMode === "create" && (
+                                    <div className="space-y-2">
+                                      <Input
+                                        placeholder="Название оператора"
+                                        value={item.operatorName ?? ""}
+                                        onChange={(event) =>
+                                          updateResolution(item.contractNumber, (prev) => ({
+                                            ...prev,
+                                            operatorName: event.target.value,
+                                          }))
+                                        }
+                                      />
+                                      <Input
+                                        placeholder="Тип"
+                                        value={item.operatorType ?? ""}
+                                        onChange={(event) =>
+                                          updateResolution(item.contractNumber, (prev) => ({
+                                            ...prev,
+                                            operatorType: event.target.value,
+                                          }))
+                                        }
+                                      />
+                                      <Input
+                                        placeholder="Менеджер"
+                                        value={item.operatorManager ?? ""}
+                                        onChange={(event) =>
+                                          updateResolution(item.contractNumber, (prev) => ({
+                                            ...prev,
+                                            operatorManager: event.target.value,
+                                          }))
+                                        }
+                                      />
+                                      <div className="grid gap-2 md:grid-cols-2">
+                                        <Input
+                                          placeholder="Телефон"
+                                          value={item.operatorPhone ?? ""}
+                                          onChange={(event) =>
+                                            updateResolution(item.contractNumber, (prev) => ({
+                                              ...prev,
+                                              operatorPhone: event.target.value,
+                                            }))
+                                          }
+                                        />
+                                        <Input
+                                          placeholder="Email"
+                                          value={item.operatorEmail ?? ""}
+                                          onChange={(event) =>
+                                            updateResolution(item.contractNumber, (prev) => ({
+                                              ...prev,
+                                              operatorEmail: event.target.value,
+                                            }))
+                                          }
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                <Input
+                                  placeholder="Тип договора"
+                                  value={item.type}
+                                  onChange={(event) =>
+                                    updateResolution(item.contractNumber, (prev) => ({
+                                      ...prev,
+                                      type: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <Select
+                                  value={item.status}
+                                  onValueChange={(value) =>
+                                    updateResolution(item.contractNumber, (prev) => ({
+                                      ...prev,
+                                      status: value as "active" | "closing",
+                                    }))
+                                  }
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Статус" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="active">Активен</SelectItem>
+                                    <SelectItem value="closing">Закрывается</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Input
+                                  placeholder="Дата начала"
+                                  value={item.startDate}
+                                  onChange={(event) =>
+                                    updateResolution(item.contractNumber, (prev) => ({
+                                      ...prev,
+                                      startDate: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <Input
+                                  placeholder="Дата окончания"
+                                  value={item.endDate}
+                                  onChange={(event) =>
+                                    updateResolution(item.contractNumber, (prev) => ({
+                                      ...prev,
+                                      endDate: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={100}
+                                  placeholder="Абонентская плата"
+                                  value={item.monthlyFee}
+                                  onChange={(event) =>
+                                    updateResolution(item.contractNumber, (prev) => ({
+                                      ...prev,
+                                      monthlyFee: Number(event.target.value),
+                                    }))
+                                  }
+                                />
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  placeholder="Кол-во SIM"
+                                  value={item.simCount}
+                                  onChange={(event) =>
+                                    updateResolution(item.contractNumber, (prev) => ({
+                                      ...prev,
+                                      simCount: Number(event.target.value),
+                                    }))
+                                  }
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {importPreview.missingSimCards.length ? (
+                      <div className="space-y-3">
+                        <div className="text-sm font-medium">SIM-карты (нет в базе)</div>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {importPreview.missingSimCards.map((item) => (
+                            <div key={item.phone} className="flex items-center justify-between rounded border border-border p-2 text-sm">
+                              <div>
+                                <div className="font-medium">{item.phone}</div>
+                                <div className="text-xs text-muted-foreground">{item.tariffName || "без тарифа"}</div>
+                              </div>
+                              <Select
+                                value={simActionMap[item.phone] ?? "create"}
+                                onValueChange={(value) =>
+                                  setSimActionMap((prev) => ({ ...prev, [item.phone]: value as SimAction }))
+                                }
+                              >
+                                <SelectTrigger className="w-32">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="create">Добавить</SelectItem>
+                                  <SelectItem value="skip">Пропустить</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {importPreview.missingTariffs.length ? (
+                      <div className="space-y-3">
+                        <div className="text-sm font-medium">Тарифы (нет в базе)</div>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {importPreview.missingTariffs.map((item) => (
+                            <div key={`${item.operatorId}:${item.tariffName}`} className="rounded border border-border p-3 text-sm">
+                              <div className="font-medium">{item.tariffName}</div>
+                              <div className="text-xs text-muted-foreground">{item.operatorName}</div>
+                              <Input
+                                className="mt-2"
+                                type="number"
+                                min={0}
+                                step={100}
+                                placeholder="Абонентская плата (опционально)"
+                                value={tariffOverrides[`${item.operatorId}:${item.tariffName}`] ?? 0}
+                                onChange={(event) =>
+                                  setTariffOverrides((prev) => ({
+                                    ...prev,
+                                    [`${item.operatorId}:${item.tariffName}`]: Number(event.target.value),
+                                  }))
+                                }
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {importPreview && (
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setImportOpen(false)}>
+                      Закрыть
+                    </Button>
+                    <Button onClick={handleImportApply} disabled={!canApplyImport || importBusy}>
+                      {importBusy ? "Применение..." : "Применить"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button>
