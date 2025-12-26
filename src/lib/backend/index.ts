@@ -134,6 +134,7 @@ export type Expense = {
   amount: number;
   vat: number;
   total: number;
+  simNumber?: string;
   status: "confirmed" | "draft" | "adjusted";
   hasDocument: boolean;
 };
@@ -1239,6 +1240,7 @@ export function useExpenses() {
         amount: payload.amount,
         vat: payload.vat,
         total: payload.total ?? payload.amount + payload.vat,
+        simNumber: payload.simNumber,
         status: payload.status,
         hasDocument: payload.hasDocument,
       });
@@ -1282,6 +1284,7 @@ export function useExpenses() {
         amount: payload.amount,
         vat: payload.vat,
         total: payload.total,
+        simNumber: payload.simNumber,
         status: payload.status,
         hasDocument: payload.hasDocument,
       });

@@ -3,7 +3,7 @@ import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Filter, MoreHorizontal, Receipt, Eye, Pencil, Upload, Check, Trash2, CalendarIcon } from "lucide-react";
+import { Plus, Search, Filter, MoreHorizontal, Receipt, Eye, Pencil, Upload, Trash2, CalendarIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -106,19 +106,6 @@ type CompanyConflict = {
 
 type SimAction = "create" | "skip";
 
-const getStatusBadge = (status: string) => {
-  switch (status) {
-    case "confirmed":
-      return <span className="badge-active">Подтверждён</span>;
-    case "draft":
-      return <span className="badge-inactive">Черновик</span>;
-    case "adjusted":
-      return <span className="badge-warning">Скорректирован</span>;
-    default:
-      return <span className="badge-inactive">{status}</span>;
-  }
-};
-
 const Expenses = () => {
   const { items: expenses, createExpense, updateExpense, deleteExpense } = useExpenses();
   const { items: companies } = useCompanies();
@@ -130,7 +117,6 @@ const Expenses = () => {
   const [editOpen, setEditOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [companyFilter, setCompanyFilter] = React.useState("all");
-  const [statusFilter, setStatusFilter] = React.useState("all");
   const [periodFilter, setPeriodFilter] = React.useState("all");
   const [contractSelect, setContractSelect] = React.useState("__custom");
   const [editContractSelect, setEditContractSelect] = React.useState("__custom");
@@ -428,11 +414,10 @@ const Expenses = () => {
         exp.type.toLowerCase().includes(search.toLowerCase()) ||
         exp.operator.toLowerCase().includes(search.toLowerCase());
       const matchesCompany = companyFilter === "all" || exp.companyId === companyFilter;
-      const matchesStatus = statusFilter === "all" || exp.status === statusFilter;
       const matchesPeriod = periodFilter === "all" || exp.month === periodFilter;
-      return matchesSearch && matchesCompany && matchesStatus && matchesPeriod;
+      return matchesSearch && matchesCompany && matchesPeriod;
     });
-  }, [expenses, search, companyFilter, statusFilter, periodFilter]);
+  }, [expenses, search, companyFilter, periodFilter]);
 
   const filteredSummary = React.useMemo(() => {
     return filteredExpenses.reduce(
@@ -500,9 +485,9 @@ const Expenses = () => {
                       <div className="font-medium">Итоги файла</div>
                       <div className="mt-2 space-y-1 text-muted-foreground">
                         <div>Строк: {importPreview.totals.rows}</div>
-                        <div>Сумма без НДС: {importPreview.totals.totalAmount.toLocaleString("ru-RU")} ₽</div>
-                        <div>НДС: {importPreview.totals.totalVat.toLocaleString("ru-RU")} ₽</div>
-                        <div>Итого: {importPreview.totals.totalTotal.toLocaleString("ru-RU")} ₽</div>
+                        <div>Сумма без НДС: {importPreview.totals.totalAmount.toLocaleString("ru-RU")} ?</div>
+                        <div>НДС: {importPreview.totals.totalVat.toLocaleString("ru-RU")} ?</div>
+                        <div>Итого: {importPreview.totals.totalTotal.toLocaleString("ru-RU")} ?</div>
                         <div>Нет договоров: {importPreview.totals.contractsMissing}</div>
                         <div>Нет SIM: {importPreview.totals.simCardsMissing}</div>
                         <div>Нет тарифов: {importPreview.totals.tariffsMissing}</div>
@@ -1048,7 +1033,7 @@ const Expenses = () => {
                     name="amount"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Сумма без НДС, ₽</FormLabel>
+                        <FormLabel>Сумма без НДС, ?</FormLabel>
                         <FormControl>
                           <Input type="number" min={0} step={100} {...field} />
                         </FormControl>
@@ -1061,7 +1046,7 @@ const Expenses = () => {
                     name="vat"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>НДС, ₽</FormLabel>
+                        <FormLabel>НДС, ?</FormLabel>
                         <FormControl>
                           <Input type="number" min={0} step={100} {...field} />
                         </FormControl>
@@ -1165,18 +1150,6 @@ const Expenses = () => {
           </SelectContent>
         </Select>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Статус" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все статусы</SelectItem>
-            <SelectItem value="confirmed">Подтверждён</SelectItem>
-            <SelectItem value="draft">Черновик</SelectItem>
-            <SelectItem value="adjusted">Скорректирован</SelectItem>
-          </SelectContent>
-        </Select>
-
         <Button variant="outline" size="icon">
           <Filter className="h-4 w-4" />
         </Button>
@@ -1186,15 +1159,15 @@ const Expenses = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="stat-card">
           <p className="stat-label">Всего за период</p>
-          <p className="stat-value">{filteredSummary.total.toLocaleString("ru-RU")} ₽</p>
+          <p className="stat-value">{filteredSummary.total.toLocaleString("ru-RU")} ?</p>
         </div>
         <div className="stat-card">
           <p className="stat-label">Подтверждено</p>
-          <p className="stat-value text-success">{filteredSummary.confirmed.toLocaleString("ru-RU")} ₽</p>
+          <p className="stat-value text-success">{filteredSummary.confirmed.toLocaleString("ru-RU")} ?</p>
         </div>
         <div className="stat-card">
           <p className="stat-label">Черновики</p>
-          <p className="stat-value text-muted-foreground">{filteredSummary.draft.toLocaleString("ru-RU")} ₽</p>
+          <p className="stat-value text-muted-foreground">{filteredSummary.draft.toLocaleString("ru-RU")} ?</p>
         </div>
         <div className="stat-card">
           <p className="stat-label">Без документов</p>
@@ -1210,44 +1183,43 @@ const Expenses = () => {
               <th>Договор</th>
               <th>Компания</th>
               <th>Оператор</th>
+              <th>SIM</th>
               <th>Период</th>
-              <th>Сумма без НДС</th>
-              <th>НДС</th>
-              <th>Итого</th>
-              <th>Статус</th>
-              <th>Документ</th>
+              <th>Сумма (с НДС)</th>
               <th className="w-12"></th>
             </tr>
           </thead>
           <tbody>
-            {filteredExpenses.map((expense) => (
-              <tr key={expense.id}>
+            {filteredExpenses.map((expense) => {
+              const isMobile = expense.type.toLowerCase().includes("мобиль");
+              return (
+              <tr
+                key={expense.id}
+                className="cursor-pointer"
+                onClick={() => setViewExpense(expense)}
+              >
                 <td>
                   <div className="flex items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
                       <Receipt className="h-4 w-4 text-warning" />
                     </div>
-                    <span className="font-medium">{expense.contract || "—"}</span>
+                    <span className="font-medium">{expense.contract || "-"}</span>
                   </div>
                 </td>
                 <td>{expense.company}</td>
-                <td>{expense.operator || "—"}</td>
+                <td>{expense.operator || "-"}</td>
+                <td>{isMobile ? expense.simNumber || "-" : "-"}</td>
                 <td>{expense.month}</td>
-                <td>{expense.amount.toLocaleString("ru-RU")} ₽</td>
-                <td className="text-muted-foreground">{expense.vat.toLocaleString("ru-RU")} ₽</td>
-                <td className="font-medium">{expense.total.toLocaleString("ru-RU")} ₽</td>
-                <td>{getStatusBadge(expense.status)}</td>
-                <td>
-                  {expense.hasDocument ? (
-                    <Check className="h-4 w-4 text-success" />
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
-                </td>
+                <td className="font-medium">{expense.total.toLocaleString("ru-RU")} ?</td>
                 <td>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(event) => event.stopPropagation()}
+                        >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -1285,7 +1257,8 @@ const Expenses = () => {
                   </DropdownMenu>
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>
@@ -1295,13 +1268,13 @@ const Expenses = () => {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Просмотр расхода</DialogTitle>
-            <DialogDescription>Детали расхода.</DialogDescription>
+            <DialogDescription>Исходные данные по расходу.</DialogDescription>
           </DialogHeader>
           {viewExpense && (
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Договор</span>
-                <span className="font-medium">{viewExpense.contract || "—"}</span>
+                <span className="font-medium">{viewExpense.contract || "-"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Компания</span>
@@ -1309,7 +1282,11 @@ const Expenses = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Оператор</span>
-                <span className="font-medium">{viewExpense.operator || "—"}</span>
+                <span className="font-medium">{viewExpense.operator || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">SIM</span>
+                <span className="font-medium">{viewExpense.simNumber || "-"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Период</span>
@@ -1321,29 +1298,15 @@ const Expenses = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Сумма без НДС</span>
-                <span className="font-medium">{viewExpense.amount.toLocaleString("ru-RU")} ₽</span>
+                <span className="font-medium">{viewExpense.amount.toLocaleString("ru-RU")} ?</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">НДС</span>
-                <span className="font-medium">{viewExpense.vat.toLocaleString("ru-RU")} ₽</span>
+                <span className="font-medium">{viewExpense.vat.toLocaleString("ru-RU")} ?</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Итого</span>
-                <span className="font-medium">{viewExpense.total.toLocaleString("ru-RU")} ₽</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Статус</span>
-                <span className="font-medium">
-                  {viewExpense.status === "confirmed"
-                    ? "Подтверждён"
-                    : viewExpense.status === "draft"
-                      ? "Черновик"
-                      : "Скорректирован"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Документ</span>
-                <span className="font-medium">{viewExpense.hasDocument ? "Да" : "Нет"}</span>
+                <span className="font-medium">{viewExpense.total.toLocaleString("ru-RU")} ?</span>
               </div>
             </div>
           )}
@@ -1517,7 +1480,7 @@ const Expenses = () => {
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Сумма без НДС, ₽</FormLabel>
+                    <FormLabel>Сумма без НДС, ?</FormLabel>
                     <FormControl>
                       <Input type="number" min={0} step={100} {...field} />
                     </FormControl>
@@ -1530,7 +1493,7 @@ const Expenses = () => {
                 name="vat"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>НДС, ₽</FormLabel>
+                    <FormLabel>НДС, ?</FormLabel>
                     <FormControl>
                       <Input type="number" min={0} step={100} {...field} />
                     </FormControl>

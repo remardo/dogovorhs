@@ -437,6 +437,7 @@ export const applyParsed = mutation({
         type: expenseType,
         amount: row.amount,
         month: row.month,
+        simNumber: row.isVatOnly ? undefined : row.phone || undefined,
         contract: row.contractNumber,
         operator: operatorName,
         vat: row.vat,

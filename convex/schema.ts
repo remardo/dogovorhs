@@ -87,6 +87,7 @@ export default defineSchema({
     type: v.string(),
     amount: v.number(),
     month: v.string(),
+    simNumber: v.optional(v.string()),
     contract: v.optional(v.string()),
     operator: v.optional(v.string()),
     vat: v.optional(v.number()),

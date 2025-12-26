@@ -26,6 +26,7 @@ export const list = query(async (ctx) => {
         amount,
         vat,
         total,
+        simNumber: e.simNumber ?? "",
         status: e.status ?? "draft",
         hasDocument: e.hasDocument ?? false,
       };
@@ -61,6 +62,7 @@ export const create = mutation({
     amount: v.number(),
     vat: v.optional(v.number()),
     total: v.optional(v.number()),
+    simNumber: v.optional(v.string()),
     status: v.union(v.literal("confirmed"), v.literal("draft"), v.literal("adjusted")),
     hasDocument: v.boolean(),
   },
@@ -98,6 +100,7 @@ export const update = mutation({
     amount: v.number(),
     vat: v.optional(v.number()),
     total: v.optional(v.number()),
+    simNumber: v.optional(v.string()),
     status: v.union(v.literal("confirmed"), v.literal("draft"), v.literal("adjusted")),
     hasDocument: v.boolean(),
   },
