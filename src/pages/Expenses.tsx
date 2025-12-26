@@ -37,8 +37,6 @@ const formSchema = z.object({
   type: z.string().min(2, "Укажите тип расхода"),
   amount: z.coerce.number().min(0, "Не может быть отрицательным"),
   vat: z.coerce.number().min(0, "Не может быть отрицательным"),
-  status: z.enum(["confirmed", "draft", "adjusted"]),
-  hasDocument: z.boolean().default(false),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -264,8 +262,6 @@ const Expenses = () => {
       type: "Мобильная связь",
       amount: 0,
       vat: 0,
-      status: "draft",
-      hasDocument: false,
     },
   });
 
@@ -291,6 +287,8 @@ const Expenses = () => {
     await createExpense({
       ...values,
       total: values.amount + values.vat,
+      status: "draft",
+      hasDocument: false,
       company: "",
       id: "",
     });
@@ -304,8 +302,6 @@ const Expenses = () => {
       type: "Мобильная связь",
       amount: 0,
       vat: 0,
-      status: "draft",
-      hasDocument: false,
     });
   };
 
@@ -325,8 +321,6 @@ const Expenses = () => {
       type: editExpense.type,
       amount: editExpense.amount,
       vat: editExpense.vat,
-      status: editExpense.status,
-      hasDocument: editExpense.hasDocument,
     });
   }, [editExpense, editForm, contracts]);
 
@@ -402,6 +396,8 @@ const Expenses = () => {
       ...editExpense,
       ...values,
       total: values.amount + values.vat,
+      status: editExpense.status,
+      hasDocument: editExpense.hasDocument,
     });
     toast({ title: "Расход обновлен" });
     setEditOpen(false);
@@ -423,12 +419,9 @@ const Expenses = () => {
     return filteredExpenses.reduce(
       (acc, item) => {
         acc.total += item.total;
-        if (item.status === "confirmed") acc.confirmed += item.total;
-        if (item.status === "draft") acc.draft += item.total;
-        if (!item.hasDocument) acc.noDocs += 1;
         return acc;
       },
-      { total: 0, confirmed: 0, draft: 0, noDocs: 0 },
+      { total: 0 },
     );
   }, [filteredExpenses]);
 
@@ -485,9 +478,9 @@ const Expenses = () => {
                       <div className="font-medium">Итоги файла</div>
                       <div className="mt-2 space-y-1 text-muted-foreground">
                         <div>Строк: {importPreview.totals.rows}</div>
-                        <div>Сумма без НДС: {importPreview.totals.totalAmount.toLocaleString("ru-RU")} ?</div>
-                        <div>НДС: {importPreview.totals.totalVat.toLocaleString("ru-RU")} ?</div>
-                        <div>Итого: {importPreview.totals.totalTotal.toLocaleString("ru-RU")} ?</div>
+                        <div>Сумма без НДС: {importPreview.totals.totalAmount.toLocaleString("ru-RU")} RUB</div>
+                        <div>НДС: {importPreview.totals.totalVat.toLocaleString("ru-RU")} RUB</div>
+                        <div>Итого: {importPreview.totals.totalTotal.toLocaleString("ru-RU")} RUB</div>
                         <div>Нет договоров: {importPreview.totals.contractsMissing}</div>
                         <div>Нет SIM: {importPreview.totals.simCardsMissing}</div>
                         <div>Нет тарифов: {importPreview.totals.tariffsMissing}</div>
@@ -1033,7 +1026,7 @@ const Expenses = () => {
                     name="amount"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Сумма без НДС, ?</FormLabel>
+                        <FormLabel>Сумма без НДС, RUB</FormLabel>
                         <FormControl>
                           <Input type="number" min={0} step={100} {...field} />
                         </FormControl>
@@ -1046,52 +1039,9 @@ const Expenses = () => {
                     name="vat"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>НДС, ?</FormLabel>
+                        <FormLabel>НДС, RUB</FormLabel>
                         <FormControl>
                           <Input type="number" min={0} step={100} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Статус</FormLabel>
-                        <FormControl>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Статус" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="confirmed">Подтверждён</SelectItem>
-                              <SelectItem value="draft">Черновик</SelectItem>
-                              <SelectItem value="adjusted">Скорректирован</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="hasDocument"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Документ</FormLabel>
-                        <FormControl>
-                          <Select onValueChange={(v) => field.onChange(v === "yes")} value={field.value ? "yes" : "no"}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Есть документ?" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="yes">Есть</SelectItem>
-                              <SelectItem value="no">Нет</SelectItem>
-                            </SelectContent>
-                          </Select>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1156,22 +1106,14 @@ const Expenses = () => {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="stat-card">
           <p className="stat-label">Всего за период</p>
-          <p className="stat-value">{filteredSummary.total.toLocaleString("ru-RU")} ?</p>
+          <p className="stat-value">{filteredSummary.total.toLocaleString("ru-RU")} RUB</p>
         </div>
         <div className="stat-card">
-          <p className="stat-label">Подтверждено</p>
-          <p className="stat-value text-success">{filteredSummary.confirmed.toLocaleString("ru-RU")} ?</p>
-        </div>
-        <div className="stat-card">
-          <p className="stat-label">Черновики</p>
-          <p className="stat-value text-muted-foreground">{filteredSummary.draft.toLocaleString("ru-RU")} ?</p>
-        </div>
-        <div className="stat-card">
-          <p className="stat-label">Без документов</p>
-          <p className="stat-value text-warning">{filteredSummary.noDocs}</p>
+          <p className="stat-label">Строк расходов</p>
+          <p className="stat-value">{filteredExpenses.length}</p>
         </div>
       </div>
 
@@ -1210,7 +1152,7 @@ const Expenses = () => {
                 <td>{expense.operator || "-"}</td>
                 <td>{isMobile ? expense.simNumber || "-" : "-"}</td>
                 <td>{expense.month}</td>
-                <td className="font-medium">{expense.total.toLocaleString("ru-RU")} ?</td>
+                <td className="font-medium">{expense.total.toLocaleString("ru-RU")} RUB</td>
                 <td>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -1237,11 +1179,7 @@ const Expenses = () => {
                         <Pencil className="h-4 w-4 mr-2" />
                         Редактировать
                       </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Upload className="h-4 w-4 mr-2" />
-                        Загрузить документ
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
+                        <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
                         onSelect={() => {
                           if (window.confirm("Удалить расход?")) {
@@ -1298,15 +1236,15 @@ const Expenses = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Сумма без НДС</span>
-                <span className="font-medium">{viewExpense.amount.toLocaleString("ru-RU")} ?</span>
+                <span className="font-medium">{viewExpense.amount.toLocaleString("ru-RU")} RUB</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">НДС</span>
-                <span className="font-medium">{viewExpense.vat.toLocaleString("ru-RU")} ?</span>
+                <span className="font-medium">{viewExpense.vat.toLocaleString("ru-RU")} RUB</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Итого</span>
-                <span className="font-medium">{viewExpense.total.toLocaleString("ru-RU")} ?</span>
+                <span className="font-medium">{viewExpense.total.toLocaleString("ru-RU")} RUB</span>
               </div>
             </div>
           )}
@@ -1480,7 +1418,7 @@ const Expenses = () => {
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Сумма без НДС, ?</FormLabel>
+                    <FormLabel>Сумма без НДС, RUB</FormLabel>
                     <FormControl>
                       <Input type="number" min={0} step={100} {...field} />
                     </FormControl>
@@ -1493,52 +1431,9 @@ const Expenses = () => {
                 name="vat"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>НДС, ?</FormLabel>
+                    <FormLabel>НДС, RUB</FormLabel>
                     <FormControl>
                       <Input type="number" min={0} step={100} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Статус</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Статус" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="confirmed">Подтверждён</SelectItem>
-                          <SelectItem value="draft">Черновик</SelectItem>
-                          <SelectItem value="adjusted">Скорректирован</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="hasDocument"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Документ</FormLabel>
-                    <FormControl>
-                      <Select onValueChange={(v) => field.onChange(v === "yes")} value={field.value ? "yes" : "no"}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Есть документ?" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="yes">Есть</SelectItem>
-                          <SelectItem value="no">Нет</SelectItem>
-                        </SelectContent>
-                      </Select>
                     </FormControl>
                     <FormMessage />
                   </FormItem>

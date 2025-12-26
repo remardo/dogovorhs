@@ -19,7 +19,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useSimCards, type SimCard } from "@/lib/backend";
+import { useExpenses, useSimCards, type Expense, type SimCard } from "@/lib/backend";
 import { filterSimCards, pickFirstOrNone } from "@/lib/simCardsUtils";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -61,6 +61,7 @@ const getStatusBadge = (status: string) => {
 const SimCards = () => {
   const { items: simCards, companies, operators, employees, tariffs, createSimCard, updateSimCard, deleteSimCard } =
     useSimCards();
+  const { items: expenses } = useExpenses();
   const [open, setOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [viewSim, setViewSim] = React.useState<SimCard | null>(null);
@@ -171,6 +172,30 @@ const SimCards = () => {
       }),
     [simCards, search, companyFilter, operatorFilter, statusFilter, typeFilter],
   );
+
+  const normalizePhone = (value: string) => value.replace(/\D/g, "");
+  const phoneVariants = (value: string) => {
+    const normalized = normalizePhone(value);
+    if (!normalized) return [] as string[];
+    if (normalized.length === 11 && normalized.startsWith("7")) {
+      return [normalized, normalized.slice(1)];
+    }
+    if (normalized.length === 10) {
+      return [normalized, `7${normalized}`];
+    }
+    return [normalized];
+  };
+
+  const simExpenses = React.useMemo(() => {
+    if (!viewSim) return [] as Expense[];
+    const variants = phoneVariants(viewSim.number);
+    if (!variants.length) return [] as Expense[];
+    return expenses.filter((expense) => {
+      if (!expense.simNumber) return false;
+      const expenseVariants = phoneVariants(expense.simNumber);
+      return expenseVariants.some((variant) => variants.includes(variant));
+    });
+  }, [expenses, viewSim]);
 
   return (
     <MainLayout
@@ -462,7 +487,7 @@ const SimCards = () => {
           </thead>
           <tbody>
             {filteredSimCards.map((sim) => (
-              <tr key={sim.id}>
+              <tr key={sim.id} className="cursor-pointer" onClick={() => setViewSim(sim)}>
                 <td>
                   <div className="flex items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10">
@@ -492,7 +517,12 @@ const SimCards = () => {
                 <td>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -549,48 +579,87 @@ const SimCards = () => {
 
       {/* Просмотр */}
       <Dialog open={!!viewSim} onOpenChange={(open) => !open && setViewSim(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Просмотр SIM-карты</DialogTitle>
             <DialogDescription>Информация по SIM.</DialogDescription>
           </DialogHeader>
           {viewSim && (
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Номер</span>
-                <span className="font-medium">{viewSim.number}</span>
+            <div className="space-y-6 text-sm">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Номер</span>
+                  <span className="font-medium">{viewSim.number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">ICCID</span>
+                  <span className="font-medium">{viewSim.iccid || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Тип</span>
+                  <span className="font-medium">{viewSim.type}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Статус</span>
+                  <span className="font-medium">{viewSim.status === "active" ? "Активен" : "Заблокирован"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Компания</span>
+                  <span className="font-medium">{viewSim.company}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Оператор</span>
+                  <span className="font-medium">{viewSim.operator}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Сотрудник</span>
+                  <span className="font-medium">{viewSim.employee || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Тариф</span>
+                  <span className="font-medium">{viewSim.tariff || "-"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Лимит</span>
+                  <span className="font-medium">{(viewSim.limit ?? 0).toLocaleString("ru-RU")} RUB</span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">ICCID</span>
-                <span className="font-medium">{viewSim.iccid || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Тип</span>
-                <span className="font-medium">{viewSim.type}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Статус</span>
-                <span className="font-medium">{viewSim.status === "active" ? "Активен" : "Заблокирован"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Компания</span>
-                <span className="font-medium">{viewSim.company}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Оператор</span>
-                <span className="font-medium">{viewSim.operator}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Сотрудник</span>
-                <span className="font-medium">{viewSim.employee || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Тариф</span>
-                <span className="font-medium">{viewSim.tariff || "—"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Лимит</span>
-                <span className="font-medium">{(viewSim.limit ?? 0).toLocaleString("ru-RU")} RUB</span>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">Начисления по номеру</div>
+                  <div className="text-xs text-muted-foreground">Строк: {simExpenses.length}</div>
+                </div>
+                {simExpenses.length ? (
+                  <div className="max-h-72 overflow-auto rounded-md border border-border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/40 text-xs text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Период</th>
+                          <th className="px-3 py-2 text-left font-medium">Тип</th>
+                          <th className="px-3 py-2 text-left font-medium">Сумма</th>
+                          <th className="px-3 py-2 text-left font-medium">НДС</th>
+                          <th className="px-3 py-2 text-left font-medium">Итого</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {simExpenses.map((expense) => (
+                          <tr key={expense.id} className="border-t border-border">
+                            <td className="px-3 py-2">{expense.month}</td>
+                            <td className="px-3 py-2">{expense.type}</td>
+                            <td className="px-3 py-2">{expense.amount.toLocaleString("ru-RU")} ₽</td>
+                            <td className="px-3 py-2 text-muted-foreground">{expense.vat.toLocaleString("ru-RU")} ₽</td>
+                            <td className="px-3 py-2 font-medium">{expense.total.toLocaleString("ru-RU")} ₽</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                    Начисления не найдены. Данные появятся после импорта детализации.
+                  </div>
+                )}
               </div>
             </div>
           )}
