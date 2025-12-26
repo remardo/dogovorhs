@@ -1,23 +1,8 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAuthIfEnabled } from "./_lib/auth";
-import * as XLSX from "xlsx";
 import type { Id } from "./_generated/dataModel";
-
-type ImportRow = {
-  rowIndex: number;
-  phone: string;
-  contractNumber: string;
-  tariffName: string;
-  periodStart: string;
-  periodEnd: string;
-  month: string;
-  amount: number;
-  vat: number;
-  total: number;
-  tariffFee: number;
-  isVatOnly: boolean;
-};
+import { phoneVariants } from "./_lib/billingImportParser";
 
 type NormalizedCompanyName = {
   raw: string;
@@ -26,156 +11,6 @@ type NormalizedCompanyName = {
 
 type NormalizedCompany = NormalizedCompanyName & { id: Id<"companies"> };
 
-const COLUMN = {
-  phone: "Номер телефона",
-  contract: "Договор",
-  periodStart: "Дата начала периода",
-  periodEnd: "Дата окончания периода",
-  tariff: "Тарифный план",
-  total: "Всего по строке",
-  vat: "НДС",
-  amount: "Итого по строке",
-  tariffFee: "Абонентская плата по тарифному плану",
-} as const;
-
-const MONTHS = [
-  "Январь",
-  "Февраль",
-  "Март",
-  "Апрель",
-  "Май",
-  "Июнь",
-  "Июль",
-  "Август",
-  "Сентябрь",
-  "Октябрь",
-  "Ноябрь",
-  "Декабрь",
-];
-
-function normalizeContractNumber(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number") return String(Math.trunc(value));
-  return String(value).trim();
-}
-
-function normalizePhone(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  const raw = typeof value === "number" ? String(Math.trunc(value)) : String(value);
-  return raw.replace(/\D/g, "");
-}
-
-function phoneVariants(value: unknown): string[] {
-  const normalized = normalizePhone(value);
-  if (!normalized) return [];
-  if (normalized.length === 11 && normalized.startsWith("7")) {
-    return [normalized, normalized.slice(1)];
-  }
-  if (normalized.length === 10) {
-    return [normalized, `7${normalized}`];
-  }
-  return [normalized];
-}
-
-function toNumber(value: unknown): number {
-  if (value === null || value === undefined || value === "") return 0;
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  const normalized = String(value).replace(/\s/g, "").replace(",", ".");
-  const num = Number(normalized);
-  return Number.isFinite(num) ? num : 0;
-}
-
-function formatDate(value: unknown): string {
-  if (!value) return "";
-  if (value instanceof Date) {
-    const dd = String(value.getDate()).padStart(2, "0");
-    const mm = String(value.getMonth() + 1).padStart(2, "0");
-    const yyyy = value.getFullYear();
-    return `${dd}.${mm}.${yyyy}`;
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (parsed && parsed.y && parsed.m && parsed.d) {
-      const dd = String(parsed.d).padStart(2, "0");
-      const mm = String(parsed.m).padStart(2, "0");
-      const yyyy = parsed.y;
-      return `${dd}.${mm}.${yyyy}`;
-    }
-  }
-  return String(value).trim();
-}
-
-function monthLabel(dateText: string): string {
-  const match = dateText.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-  if (!match) return "текущий период";
-  const monthIndex = Number(match[2]) - 1;
-  const year = match[3];
-  const monthName = MONTHS[monthIndex] ?? "";
-  return monthName ? `${monthName} ${year}` : "текущий период";
-}
-
-function readWorkbook(data: ArrayBuffer) {
-  const bytes = new Uint8Array(data);
-  return XLSX.read(bytes, { type: "array" });
-}
-
-async function loadImportFile(ctx: { storage: { getUrl: (id: Id<"_storage">) => Promise<string | null> } }, fileId: Id<"_storage">) {
-  const url = await ctx.storage.getUrl(fileId);
-  if (!url) throw new Error("Файл не найден");
-  const response = await fetch(url);
-  if (!response.ok) throw new Error("Не удалось загрузить файл");
-  return await response.arrayBuffer();
-}
-
-function parseRows(data: ArrayBuffer): ImportRow[] {
-  const workbook = readWorkbook(data);
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) return [];
-  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-    defval: null,
-    raw: true,
-  });
-
-  const rows: ImportRow[] = [];
-
-  rawRows.forEach((row, index) => {
-    const contractNumber = normalizeContractNumber(row[COLUMN.contract]);
-    if (!contractNumber) return;
-
-    const phone = normalizePhone(row[COLUMN.phone]);
-    const tariffName = String(row[COLUMN.tariff] ?? "").trim();
-    const periodStart = formatDate(row[COLUMN.periodStart]);
-    const periodEnd = formatDate(row[COLUMN.periodEnd]);
-    const amount = toNumber(row[COLUMN.amount]);
-    const vat = toNumber(row[COLUMN.vat]);
-    const total = toNumber(row[COLUMN.total]);
-    const tariffFee = toNumber(row[COLUMN.tariffFee]);
-    const resolvedTotal = total > 0 ? total : amount + vat;
-
-    if (resolvedTotal <= 0 && vat <= 0 && amount <= 0) return;
-
-    const isVatOnly = phone === "" || /^0+$/.test(phone);
-    const month = monthLabel(periodEnd || periodStart);
-
-    rows.push({
-      rowIndex: index + 1,
-      phone,
-      contractNumber,
-      tariffName,
-      periodStart,
-      periodEnd,
-      month,
-      amount,
-      vat,
-      total: resolvedTotal,
-      tariffFee,
-      isVatOnly,
-    });
-  });
-
-  return rows;
-}
 
 function normalizeName(value: string): NormalizedCompanyName {
   const raw = value.trim();
@@ -229,155 +64,56 @@ export const get = query({
   },
 });
 
-export const preview = mutation({
-  args: { id: v.id("billingImports") },
-  handler: async (ctx, { id }) => {
+export const getContext = query(async (ctx) => {
+  await requireAuthIfEnabled(ctx);
+  const [contracts, operators, simCards, tariffs] = await Promise.all([
+    ctx.db.query("contracts").collect(),
+    ctx.db.query("operators").collect(),
+    ctx.db.query("simCards").collect(),
+    ctx.db.query("tariffs").collect(),
+  ]);
+  return { contracts, operators, simCards, tariffs };
+});
+
+export const updatePreviewSummary = mutation({
+  args: {
+    id: v.id("billingImports"),
+    summary: v.object({
+      rows: v.number(),
+      contractsMissing: v.number(),
+      simCardsMissing: v.number(),
+      tariffsMissing: v.number(),
+      totalAmount: v.number(),
+      totalVat: v.number(),
+      totalTotal: v.number(),
+    }),
+  },
+  handler: async (ctx, { id, summary }) => {
     await requireAuthIfEnabled(ctx);
-    const record = await ctx.db.get(id);
-    if (!record) throw new Error("Импорт не найден");
-
-    const data = await loadImportFile(ctx, record.fileId);
-    const rows = parseRows(data);
-
-    const [contracts, operators, simCards, tariffs] = await Promise.all([
-      ctx.db.query("contracts").collect(),
-      ctx.db.query("operators").collect(),
-      ctx.db.query("simCards").collect(),
-      ctx.db.query("tariffs").collect(),
-    ]);
-
-    const contractByNumber = new Map(contracts.map((c) => [c.number, c]));
-    const operatorById = new Map(operators.map((o) => [o._id, o]));
-    const tariffByKey = new Map(
-      tariffs.map((t) => [`${t.operatorId}:${t.name.toLowerCase().trim()}`, t]),
-    );
-    const simByPhone = new Map<string, (typeof simCards)[number]>();
-    simCards.forEach((s) => {
-      for (const variant of phoneVariants(s.number)) {
-        simByPhone.set(variant, s);
-      }
-    });
-
-    const missingContracts = new Map<
-      string,
-      { rowsCount: number; periodStart?: string; periodEnd?: string }
-    >();
-    const missingSimCards = new Map<string, { contractNumber: string; tariffName: string }>();
-    const missingTariffs = new Map<
-      string,
-      { operatorId: string; operatorName: string; contractNumber: string; tariffName: string }
-    >();
-    let totalAmount = 0;
-    let totalVat = 0;
-    let totalTotal = 0;
-
-    const previewRows = rows.map((row) => {
-      const issues: string[] = [];
-      const contract = contractByNumber.get(row.contractNumber);
-      totalAmount += row.amount;
-      totalVat += row.vat;
-      totalTotal += row.total;
-
-      if (!contract) {
-        issues.push("missingContract");
-        const existing = missingContracts.get(row.contractNumber);
-        missingContracts.set(row.contractNumber, {
-          rowsCount: (existing?.rowsCount ?? 0) + 1,
-          periodStart: existing?.periodStart ?? row.periodStart,
-          periodEnd: existing?.periodEnd ?? row.periodEnd,
-        });
-      } else if (!row.isVatOnly) {
-        const variants = phoneVariants(row.phone);
-        const hasSim = variants.some((variant) => simByPhone.has(variant));
-        if (variants.length && !hasSim) {
-          issues.push("missingSim");
-          const primary = variants[0];
-          if (!missingSimCards.has(primary)) {
-            missingSimCards.set(primary, {
-              contractNumber: row.contractNumber,
-              tariffName: row.tariffName,
-            });
-          }
-        }
-
-        const operator = operatorById.get(contract.operatorId);
-        if (operator && row.tariffName) {
-          const tariffKey = `${operator._id}:${row.tariffName.toLowerCase().trim()}`;
-          if (!tariffByKey.has(tariffKey)) {
-            issues.push("missingTariff");
-            missingTariffs.set(tariffKey, {
-              operatorId: `${operator._id}`,
-              operatorName: operator.name,
-              contractNumber: row.contractNumber,
-              tariffName: row.tariffName,
-            });
-          }
-        }
-      }
-
-      return {
-        rowIndex: row.rowIndex,
-        phone: row.phone,
-        contractNumber: row.contractNumber,
-        tariffName: row.tariffName,
-        periodStart: row.periodStart,
-        periodEnd: row.periodEnd,
-        month: row.month,
-        amount: row.amount,
-        vat: row.vat,
-        total: row.total,
-        isVatOnly: row.isVatOnly,
-        issues,
-      };
-    });
-
-    const response = {
-      importId: id,
-      fileName: record.fileName,
-      totals: {
-        rows: rows.length,
-        contractsMissing: missingContracts.size,
-        simCardsMissing: missingSimCards.size,
-        tariffsMissing: missingTariffs.size,
-        totalAmount,
-        totalVat,
-        totalTotal,
-      },
-      rows: previewRows,
-      missingContracts: Array.from(missingContracts.entries()).map(([contractNumber, info]) => ({
-        contractNumber,
-        rowsCount: info.rowsCount,
-        periodStart: info.periodStart ?? "",
-        periodEnd: info.periodEnd ?? "",
-      })),
-      missingSimCards: Array.from(missingSimCards.entries()).map(([phone, info]) => ({
-        phone,
-        contractNumber: info.contractNumber,
-        tariffName: info.tariffName,
-      })),
-      missingTariffs: Array.from(missingTariffs.values()),
-    };
-
-    await ctx.db.patch(id, {
-      status: "preview",
-      previewSummary: {
-        rows: rows.length,
-        contractsMissing: missingContracts.size,
-        simCardsMissing: missingSimCards.size,
-        tariffsMissing: missingTariffs.size,
-        totalAmount,
-        totalVat,
-        totalTotal,
-      },
-    });
-
-    return response;
+    await ctx.db.patch(id, { status: "preview", previewSummary: summary });
+    return { ok: true };
   },
 });
 
-export const apply = mutation({
+const importRowSchema = v.object({
+  rowIndex: v.number(),
+  phone: v.string(),
+  contractNumber: v.string(),
+  tariffName: v.string(),
+  periodStart: v.string(),
+  periodEnd: v.string(),
+  month: v.string(),
+  amount: v.number(),
+  vat: v.number(),
+  total: v.number(),
+  tariffFee: v.number(),
+  isVatOnly: v.boolean(),
+});
+
+export const applyParsed = mutation({
   args: {
     id: v.id("billingImports"),
+    rows: v.array(importRowSchema),
     contractResolutions: v.array(
       v.object({
         contractNumber: v.string(),
@@ -440,8 +176,7 @@ export const apply = mutation({
     const record = await ctx.db.get(args.id);
     if (!record) throw new Error("Импорт не найден");
 
-    const data = await loadImportFile(ctx, record.fileId);
-    const rows = parseRows(data);
+    const rows = args.rows;
 
     const [companies, operators, contracts, tariffs] = await Promise.all([
       ctx.db.query("companies").collect(),

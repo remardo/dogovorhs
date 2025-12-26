@@ -190,7 +190,7 @@ const Expenses = () => {
         fileName: importFile.name,
       });
       setImportId(saved.importId as string);
-      const preview = await convexClient.mutation("billingImports:preview", { id: saved.importId });
+      const preview = await convexClient.action("billingImportActions:preview", { id: saved.importId });
       setImportPreview(preview as ImportPreview);
       setCompanyConflicts(null);
     } catch (error) {
@@ -248,7 +248,7 @@ const Expenses = () => {
           monthlyFee: tariffOverrides[`${item.operatorId}:${item.tariffName}`] || undefined,
         })),
       };
-      const result = await convexClient.mutation("billingImports:apply", payload);
+      const result = await convexClient.action("billingImportActions:apply", payload);
       if (result?.status === "needs_confirmation") {
         setCompanyConflicts(result.companyConflicts as CompanyConflict[]);
         toast({ title: "Нужно подтвердить компании", description: "Выберите существующую или создайте новую." });
