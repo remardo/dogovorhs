@@ -24,6 +24,8 @@ type NormalizedCompanyName = {
   normalized: string;
 };
 
+type NormalizedCompany = NormalizedCompanyName & { id: Id<"companies"> };
+
 const COLUMN = {
   phone: "Номер телефона",
   contract: "Договор",
@@ -117,11 +119,12 @@ function readWorkbook(data: ArrayBuffer) {
   return XLSX.read(bytes, { type: "array" });
 }
 
-async function loadImportFile(ctx: { storage: { get: (id: string) => Promise<Blob | ArrayBuffer | null> } }, fileId: string) {
-  const file = await ctx.storage.get(fileId);
-  if (!file) throw new Error("Файл не найден");
-  if (file instanceof ArrayBuffer) return file;
-  return await file.arrayBuffer();
+async function loadImportFile(ctx: { storage: { getUrl: (id: Id<"_storage">) => Promise<string | null> } }, fileId: Id<"_storage">) {
+  const url = await ctx.storage.getUrl(fileId);
+  if (!url) throw new Error("Файл не найден");
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("Не удалось загрузить файл");
+  return await response.arrayBuffer();
 }
 
 function parseRows(data: ArrayBuffer): ImportRow[] {
@@ -184,7 +187,7 @@ function normalizeName(value: string): NormalizedCompanyName {
   return { raw, normalized };
 }
 
-function findSimilarCompanies(target: NormalizedCompanyName, companies: NormalizedCompanyName[]) {
+function findSimilarCompanies(target: NormalizedCompanyName, companies: NormalizedCompany[]) {
   if (!target.normalized) return [];
   return companies.filter((c) => {
     if (!c.normalized) return false;
@@ -328,7 +331,7 @@ export const preview = mutation({
       };
     });
 
-    return {
+    const response = {
       importId: id,
       fileName: record.fileName,
       totals: {
@@ -447,12 +450,15 @@ export const apply = mutation({
       ctx.db.query("tariffs").collect(),
     ]);
 
-    const normalizedCompanies = companies.map((c) => ({
+    const normalizedCompanies: NormalizedCompany[] = companies.map((c) => ({
       id: c._id,
       ...normalizeName(c.name),
     }));
 
-    const createCompanyRequests = args.contractResolutions.filter((c) => c.company.mode === "create");
+    const createCompanyRequests = args.contractResolutions.filter(
+      (c): c is typeof c & { company: { mode: "create"; name: string; inn?: string; kpp?: string; comment?: string; forceCreate?: boolean } } =>
+        c.company.mode === "create",
+    );
     const companyConflicts = createCompanyRequests.flatMap((c) => {
       const target = normalizeName(c.company.name);
       if (c.company.forceCreate) return [];
@@ -492,7 +498,7 @@ export const apply = mutation({
       };
     }
 
-    const createdCompanies = new Map<string, string>();
+    const createdCompanies = new Map<string, Id<"companies">>();
     let contractsCreated = 0;
     let tariffsCreated = 0;
     let simCardsCreated = 0;
@@ -515,7 +521,7 @@ export const apply = mutation({
       createdCompanies.set(nameKey, companyId);
     }
 
-    const getCompanyId = (resolution: (typeof args.contractResolutions)[number]) => {
+    const getCompanyId = (resolution: (typeof args.contractResolutions)[number]): Id<"companies"> => {
       if (resolution.company.mode === "existing") return resolution.company.id;
       const key = normalizeName(resolution.company.name).normalized;
       const created = createdCompanies.get(key);
@@ -523,14 +529,14 @@ export const apply = mutation({
       throw new Error(`Не удалось создать компанию: ${resolution.company.name}`);
     };
 
-    const createdOperators = new Map<string, string>();
+    const createdOperators = new Map<string, Id<"operators">>();
     for (const resolution of args.contractResolutions) {
       if (resolution.operator.mode === "existing") continue;
       const key = resolution.operator.name.toLowerCase().trim();
       if (createdOperators.has(key)) continue;
       const existing = operatorByName.get(key);
       if (existing) {
-        createdOperators.set(key, `${existing._id}`);
+        createdOperators.set(key, existing._id);
         continue;
       }
       const createdAt = Date.now();
@@ -547,7 +553,7 @@ export const apply = mutation({
       createdOperators.set(key, operatorId);
     }
 
-    const getOperatorId = (resolution: (typeof args.contractResolutions)[number]) => {
+    const getOperatorId = (resolution: (typeof args.contractResolutions)[number]): Id<"operators"> => {
       if (resolution.operator.mode === "existing") return resolution.operator.id;
       const key = resolution.operator.name.toLowerCase().trim();
       const existing = createdOperators.get(key);
