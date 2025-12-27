@@ -1,4 +1,3 @@
-import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { ImportRow } from "./billingImportParser";
 
 type TextLine = { text: string };
@@ -60,6 +59,7 @@ function monthLabel(dateText: string): string {
 }
 
 async function extractLines(data: ArrayBuffer): Promise<TextLine[]> {
+  const pdfjs = await loadPdfJs();
   const doc = await pdfjs.getDocument({ data }).promise;
   const lines: TextLine[] = [];
   for (let pageIndex = 1; pageIndex <= doc.numPages; pageIndex += 1) {
@@ -188,4 +188,15 @@ export async function parseMegafonPdfRows(data: ArrayBuffer): Promise<ImportRow[
   flush();
 
   return rows;
+}
+
+async function loadPdfJs() {
+  const clone = globalThis.structuredClone;
+  if (typeof clone === "function") {
+    globalThis.structuredClone = ((value: unknown) => clone(value)) as typeof structuredClone;
+  } else {
+    globalThis.structuredClone = ((value: unknown) => JSON.parse(JSON.stringify(value))) as typeof structuredClone;
+  }
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  return pdfjs;
 }
