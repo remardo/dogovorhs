@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { requireAuthIfEnabled } from "./_lib/auth";
 import { parseRows, phoneVariants } from "./_lib/billingImportParser";
 import { parseMegafonPdfRows } from "./_lib/billingImportPdfMegafon";
+import { parseMegafonCsvRows } from "./_lib/billingImportCsvMegafon";
 import { applyVatDistribution, vatGroupKey } from "./_lib/vatDistribution";
 import type { Id } from "./_generated/dataModel";
 
@@ -16,8 +17,13 @@ async function loadImportFile(
 }
 
 async function parseImportRows(fileName: string, data: ArrayBuffer) {
-  if (fileName.toLowerCase().endsWith(".pdf")) {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".pdf")) {
     return await parseMegafonPdfRows(data);
+  }
+  if (lower.endsWith(".csv")) {
+    const csvRows = parseMegafonCsvRows(data);
+    if (csvRows.length) return csvRows;
   }
   return parseRows(data);
 }
