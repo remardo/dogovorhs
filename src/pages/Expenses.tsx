@@ -146,7 +146,7 @@ type CompanyConflict = {
 type SimAction = "create" | "skip";
 
 const Expenses = () => {
-  const { items: expenses, createExpense, updateExpense, deleteExpense } = useExpenses();
+  const { items: expenses, refreshExpenses, createExpense, updateExpense, deleteExpense } = useExpenses();
   const { items: companies } = useCompanies();
   const { items: contracts } = useContracts();
   const { items: operators } = useOperators();
@@ -212,6 +212,7 @@ const Expenses = () => {
     try {
       await convexClient.mutation("billingImports:remove", { id });
       await loadImportHistory();
+      await refreshExpenses();
       toast({ title: "Импорт удален" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Не удалось удалить импорт";
@@ -350,6 +351,7 @@ const Expenses = () => {
       }
       toast({ title: "Импорт применен", description: "Данные добавлены в расходы." });
       setImportOpen(false);
+      await refreshExpenses();
       await loadImportHistory();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Ошибка применения импорта";

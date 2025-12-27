@@ -1244,6 +1244,17 @@ export function useExpenses() {
     };
   }, []);
 
+  const refreshExpenses = async () => {
+    if (!convexClient || !backendAvailable) return;
+    try {
+      const res = await convexClient.query("expenses:list", {});
+      setData(res as typeof data);
+    } catch (err) {
+      console.warn("expenses:list refresh failed", err);
+      notifyBackendError();
+    }
+  };
+
   const createExpense = async (payload: Omit<Expense, "id" | "company" | "total"> & { total?: number }) => {
     const addLocal = () => {
       const companyName = data.companies.find((c) => c.id === payload.companyId)?.name ?? "Компания";
@@ -1365,7 +1376,7 @@ export function useExpenses() {
     }
   };
 
-  return { ...data, createExpense, updateExpense, deleteExpense };
+  return { ...data, refreshExpenses, createExpense, updateExpense, deleteExpense };
 }
 
 export function useSimCards() {
