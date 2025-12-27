@@ -248,7 +248,22 @@ const Expenses = () => {
       setImportId(saved.importId as string);
       const preview = await convexClient.action("billingImportActions:preview", { id: saved.importId });
       setImportPreview(preview as ImportPreview);
-      setImportRows((preview as ImportPreview).rows);
+      const sanitizedRows = (preview as ImportPreview).rows.map((row) => ({
+        rowIndex: row.rowIndex,
+        phone: row.phone,
+        contractNumber: row.contractNumber,
+        tariffName: row.tariffName,
+        periodStart: row.periodStart,
+        periodEnd: row.periodEnd,
+        month: row.month,
+        amount: row.amount,
+        vat: row.vat,
+        total: row.total,
+        tariffFee: row.tariffFee,
+        vatMismatch: row.vatMismatch,
+        isVatOnly: row.isVatOnly,
+      }));
+      setImportRows(sanitizedRows);
       setCompanyConflicts(null);
       await loadImportHistory();
     } catch (error) {
@@ -265,7 +280,21 @@ const Expenses = () => {
     try {
       const payload = {
         id: importId,
-        rows: importRows,
+        rows: importRows.map((row) => ({
+          rowIndex: row.rowIndex,
+          phone: row.phone,
+          contractNumber: row.contractNumber,
+          tariffName: row.tariffName,
+          periodStart: row.periodStart,
+          periodEnd: row.periodEnd,
+          month: row.month,
+          amount: row.amount,
+          vat: row.vat,
+          total: row.total,
+          tariffFee: row.tariffFee,
+          vatMismatch: row.vatMismatch,
+          isVatOnly: row.isVatOnly,
+        })),
         contractResolutions: contractResolutions.map((item) => ({
           contractNumber: item.contractNumber,
           company:
