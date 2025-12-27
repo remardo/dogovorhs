@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import { parseRows, phoneVariants } from "./billingImportParser";
 
-function buildWorkbook(rows: Record<string, unknown>[]) {
+function buildWorkbook(rows: Record<string, unknown>[]): ArrayBuffer {
   const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
   const data = [headers, ...rows.map((row) => headers.map((key) => row[key] ?? null))];
   const sheet = XLSX.utils.aoa_to_sheet(data);
@@ -11,8 +11,11 @@ function buildWorkbook(rows: Record<string, unknown>[]) {
   const bytes = XLSX.write(workbook, { type: "array", bookType: "xlsx" }) as
     | ArrayBuffer
     | Uint8Array;
-  if (bytes instanceof ArrayBuffer) return bytes;
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const raw =
+    bytes instanceof ArrayBuffer
+      ? bytes
+      : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  return Uint8Array.from(new Uint8Array(raw)).buffer;
 }
 
 describe("phoneVariants", () => {
@@ -84,8 +87,8 @@ describe("parseRows", () => {
 
     const rows = parseRows(data);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.total).toBe(120);
-    expect(rows[0]?.vatMismatch).toBe(true);
+    expect(rows[0]?.total).toBe(110);
+    expect(rows[0]?.vatMismatch).toBe(false);
   });
 
   it("marks VAT-only rows when phone is empty or zeros", () => {

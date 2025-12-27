@@ -2,6 +2,7 @@ import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAuthIfEnabled } from "./_lib/auth";
 import { parseRows, phoneVariants } from "./_lib/billingImportParser";
+import { applyVatDistribution, vatGroupKey } from "./_lib/vatDistribution";
 import type { Id } from "./_generated/dataModel";
 
 async function loadImportFile(
@@ -75,7 +76,8 @@ export const preview = action({
     if (!record) throw new Error("Импорт не найден");
 
     const data = await loadImportFile(ctx, record.fileId);
-    const rows = parseRows(data);
+    const parsedRows = parseRows(data);
+    const { rows, vatMismatches, distributedGroups } = applyVatDistribution(parsedRows);
 
     const { contracts, operators, simCards, tariffs } = (await ctx.runQuery(
       getContextRef,
@@ -103,16 +105,17 @@ export const preview = action({
     let totalAmount = 0;
     let totalVat = 0;
     let totalTotal = 0;
-    let vatMismatches = 0;
 
     const previewRows = rows.map((row) => {
       const issues: string[] = [];
       const contract = contractByNumber.get(row.contractNumber);
-      totalAmount += row.amount;
-      totalVat += row.vat;
-      totalTotal += row.total;
+      const shouldSkipVatTotals = row.isVatOnly && distributedGroups.has(vatGroupKey(row));
+      if (!shouldSkipVatTotals) {
+        totalAmount += row.amount;
+        totalVat += row.vat;
+        totalTotal += row.total;
+      }
       if (row.vatMismatch) {
-        vatMismatches += 1;
         issues.push("vatMismatch");
       }
 
@@ -281,7 +284,13 @@ export const apply = action({
     const record = (await ctx.runQuery(getImportRef, { id: args.id })) as ImportRecord;
     if (!record) throw new Error("Импорт не найден");
     const data = await loadImportFile(ctx, record.fileId);
-    const rows = parseRows(data);
-    return (await ctx.runMutation(applyParsedRef, { ...args, rows })) as ApplyResult;
+    const parsedRows = parseRows(data);
+    const { rows, distributedGroups } = applyVatDistribution(parsedRows);
+    const vatDistributionKeys = Array.from(distributedGroups.values());
+    return (await ctx.runMutation(applyParsedRef, {
+      ...args,
+      rows,
+      vatDistributionKeys,
+    })) as ApplyResult;
   },
 });

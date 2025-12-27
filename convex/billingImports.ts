@@ -150,6 +150,7 @@ export const applyParsed = mutation({
         }),
       ),
     ),
+    vatDistributionKeys: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     await requireAuthIfEnabled(ctx);
@@ -157,6 +158,7 @@ export const applyParsed = mutation({
     if (!record) throw new Error("Импорт не найден");
 
     const rows = args.rows;
+    const vatDistributionKeys = new Set(args.vatDistributionKeys ?? []);
 
     const [companies, operators, contracts, tariffs] = await Promise.all([
       ctx.db.query("companies").collect(),
@@ -391,6 +393,9 @@ export const applyParsed = mutation({
       if (!contract) continue;
       const operatorName = operatorNameById.get(contract.operatorId) ?? "Оператор";
       const expenseType = row.isVatOnly ? "НДС" : row.tariffName || "Начисления по счету";
+      if (row.isVatOnly && vatDistributionKeys.has(`${row.contractNumber}::${row.month}`)) {
+        continue;
+      }
       let simNumber: string | undefined;
       if (!row.isVatOnly && row.phone) {
         const variants = phoneVariants(row.phone);

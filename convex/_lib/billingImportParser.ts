@@ -75,10 +75,6 @@ function toNumber(value: unknown): number {
   return Number.isFinite(num) ? num : 0;
 }
 
-function roundCurrency(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
 function formatDate(value: unknown): string {
   if (!value) return "";
   if (value instanceof Date) {
@@ -138,20 +134,9 @@ export function parseRows(data: ArrayBuffer): ImportRow[] {
     const vatFromTable = toNumber(row[COLUMN.vat]);
     const totalFromTable = toNumber(row[COLUMN.total]);
     const tariffFee = toNumber(row[COLUMN.tariffFee]);
-    const computedVat = roundCurrency(amount * 0.2);
-    const computedTotal = roundCurrency(amount + computedVat);
-
-    let vat = vatFromTable;
-    let resolvedTotal = totalFromTable > 0 ? totalFromTable : amount + vatFromTable;
-    let vatMismatch = false;
-
-    if (amount > 0 && !isVatOnly) {
-      vat = computedVat;
-      resolvedTotal = computedTotal;
-      const vatDiff = Math.abs(vatFromTable - computedVat);
-      const totalDiff = totalFromTable > 0 ? Math.abs(totalFromTable - computedTotal) : 0;
-      vatMismatch = vatDiff > 0.02 || totalDiff > 0.02;
-    }
+    const vat = vatFromTable;
+    const resolvedTotal = totalFromTable > 0 ? totalFromTable : amount + vatFromTable;
+    const vatMismatch = false;
 
     if (resolvedTotal <= 0 && vat <= 0 && amount <= 0) return;
 
