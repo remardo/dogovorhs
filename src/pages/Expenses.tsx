@@ -599,7 +599,7 @@ const Expenses = () => {
                 Импорт
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-5xl">
+            <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Импорт расходов</DialogTitle>
                 <DialogDescription>Загрузите XLS/XLSX/CSV и подтвердите данные перед применением.</DialogDescription>
@@ -658,7 +658,7 @@ const Expenses = () => {
                     </div>
                     <div className="mt-3 max-h-72 overflow-auto rounded-md border border-border">
                       <table className="w-full text-sm">
-                        <thead className="bg-muted/40 text-xs text-muted-foreground sticky top-0">
+                        <thead className="bg-muted/40 text-xs text-muted-foreground sticky top-0 z-10">
                           <tr>
                             <th className="px-3 py-2 text-left font-medium">№</th>
                             <th className="px-3 py-2 text-left font-medium">Договор</th>
