@@ -156,6 +156,7 @@ export const applyParsed = mutation({
             email: v.optional(v.string()),
           }),
         ),
+        name: v.optional(v.string()),
         type: v.string(),
         status: v.union(v.literal("active"), v.literal("closing")),
         startDate: v.string(),
@@ -303,6 +304,7 @@ export const applyParsed = mutation({
       const createdAt = Date.now();
       const contractId = await ctx.db.insert("contracts", {
         number: resolution.contractNumber,
+        name: resolution.name,
         companyId,
         operatorId,
         type: resolution.type,

@@ -127,6 +127,7 @@ type ContractResolutionState = {
   operatorManager?: string;
   operatorPhone?: string;
   operatorEmail?: string;
+  name?: string;
   type: string;
   status: "active" | "closing";
   startDate: string;
@@ -319,6 +320,7 @@ const Expenses = () => {
                   phone: item.operatorPhone || undefined,
                   email: item.operatorEmail || undefined,
                 },
+          name: item.name || undefined,
           type: item.type,
           status: item.status,
           startDate: item.startDate,
@@ -476,6 +478,7 @@ const Expenses = () => {
         operatorManager: "",
         operatorPhone: "",
         operatorEmail: "",
+        name: "",
         type: "Мобильная связь",
         status: "active",
         startDate: item.periodStart || "",
@@ -548,6 +551,16 @@ const Expenses = () => {
     });
   }, [expenses, search, companyFilter, periodFilter]);
 
+  const contractNameByNumber = React.useMemo(() => {
+    const map = new Map<string, string>();
+    contracts.forEach((contract) => {
+      if (contract.number) {
+        map.set(contract.number, contract.name || "");
+      }
+    });
+    return map;
+  }, [contracts]);
+
   const filteredSummary = React.useMemo(() => {
     return filteredExpenses.reduce(
       (acc, item) => {
@@ -598,11 +611,15 @@ const Expenses = () => {
                       accept=".xls,.xlsx,.csv"
                       onChange={(event) => setImportFile(event.target.files?.[0] ?? null)}
                     />
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                       <Button onClick={handleImportPreview} disabled={importBusy || !importFile}>
                         {importBusy ? "Загрузка..." : "Предпросмотр"}
                       </Button>
-                      {importFile && <span className="text-xs text-muted-foreground">{importFile.name}</span>}
+                      {importFile && (
+                        <span className="text-xs text-muted-foreground sm:max-w-[260px] truncate">
+                          {importFile.name}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -972,6 +989,16 @@ const Expenses = () => {
                                     updateResolution(item.contractNumber, (prev) => ({
                                       ...prev,
                                       type: event.target.value,
+                                    }))
+                                  }
+                                />
+                                <Input
+                                  placeholder="Название договора (для интернета)"
+                                  value={item.name ?? ""}
+                                  onChange={(event) =>
+                                    updateResolution(item.contractNumber, (prev) => ({
+                                      ...prev,
+                                      name: event.target.value,
                                     }))
                                   }
                                 />
@@ -1387,7 +1414,7 @@ const Expenses = () => {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Договор</th>
+              <th>SIM/Услуга</th>
               <th>Компания</th>
               <th>Оператор</th>
               <th>SIM</th>
@@ -1398,6 +1425,11 @@ const Expenses = () => {
           </thead>
           <tbody>
             {filteredExpenses.map((expense) => {
+              const isMobile = expense.type.toLowerCase().includes("мобиль");
+              const contractName = expense.contract ? contractNameByNumber.get(expense.contract) : "";
+              const primaryLabel = isMobile
+                ? expense.simNumber || "-"
+                : contractName || expense.contract || "-";
               return (
               <tr
                 key={expense.id}
@@ -1409,7 +1441,7 @@ const Expenses = () => {
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
                       <Receipt className="h-4 w-4 text-warning" />
                     </div>
-                    <span className="font-medium">{expense.contract || "-"}</span>
+                    <span className="font-medium">{primaryLabel}</span>
                   </div>
                 </td>
                 <td>{expense.company}</td>

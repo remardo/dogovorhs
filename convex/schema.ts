@@ -67,6 +67,7 @@ export default defineSchema({
 
   contracts: defineTable({
     number: v.string(),
+    name: v.optional(v.string()),
     companyId: v.id("companies"),
     operatorId: v.id("operators"),
     type: v.string(),

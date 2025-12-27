@@ -274,6 +274,7 @@ export const apply = action({
             email: v.optional(v.string()),
           }),
         ),
+        name: v.optional(v.string()),
         type: v.string(),
         status: v.union(v.literal("active"), v.literal("closing")),
         startDate: v.string(),

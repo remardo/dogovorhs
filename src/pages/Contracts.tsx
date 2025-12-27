@@ -36,6 +36,7 @@ const NONE = "__none";
 
 const formSchema = z.object({
   number: z.string().min(3, "Введите номер договора"),
+  name: z.string().optional(),
   companyId: z.string().min(1, "Выберите компанию"),
   operatorId: z.string().min(1, "Выберите оператора"),
   type: z.string().min(2, "Укажите тип"),
@@ -64,6 +65,7 @@ const Contracts = () => {
     resolver: zodResolver(formSchema),
     defaultValues: {
       number: "",
+      name: "",
       companyId: companies[0]?.id ?? "",
       operatorId: operators[0]?.id ?? "",
       type: "Мобильная связь",
@@ -160,19 +162,32 @@ const Contracts = () => {
             </DialogHeader>
             <Form {...form}>
               <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={form.handleSubmit(onSubmit)}>
-                <FormField
-                  control={form.control}
-                  name="number"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Номер договора</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Напр. МТС-2025/001" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <FormField
+                control={form.control}
+                name="number"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Номер договора</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Напр. МТС-2025/001" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Название (для интернета)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Канал 100 Мбит, офис 1" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
                 <FormField
                   control={form.control}
                   name="companyId"
@@ -383,6 +398,7 @@ const Contracts = () => {
           <thead>
             <tr>
               <th>Номер договора</th>
+              <th>Название</th>
               <th>Компания</th>
               <th>Оператор</th>
               <th>Тип</th>
@@ -408,6 +424,7 @@ const Contracts = () => {
                     <span className="font-medium">{contract.number}</span>
                   </div>
                 </td>
+                <td>{contract.name || "-"}</td>
                 <td>{contract.company}</td>
                 <td>{contract.operator}</td>
                 <td>
@@ -443,6 +460,7 @@ const Contracts = () => {
                           setEditContract(contract);
                           editForm.reset({
                             number: contract.number,
+                            name: contract.name ?? "",
                             companyId: contract.companyId,
                             operatorId: contract.operatorId,
                             type: contract.type,
@@ -492,6 +510,10 @@ const Contracts = () => {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Номер</span>
                   <span className="font-medium">{viewContract.number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Название</span>
+                  <span className="font-medium">{viewContract.name || "-"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Компания</span>
@@ -599,6 +621,19 @@ const Contracts = () => {
                     <FormLabel>Номер договора</FormLabel>
                     <FormControl>
                       <Input placeholder="Напр. МТС-2025/001" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Название (для интернета)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Канал 100 Мбит, офис 1" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

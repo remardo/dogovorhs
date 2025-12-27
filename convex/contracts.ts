@@ -17,6 +17,7 @@ export const list = query(async (ctx) => {
     .map((contract) => ({
       id: `${contract._id}`,
       number: contract.number,
+      name: contract.name ?? "",
       companyId: contract.companyId,
       company: companyById.get(contract.companyId) ?? "Компания",
       operatorId: contract.operatorId,
@@ -39,6 +40,7 @@ export const list = query(async (ctx) => {
 export const create = mutation({
   args: {
     number: v.string(),
+    name: v.optional(v.string()),
     companyId: v.id("companies"),
     operatorId: v.id("operators"),
     type: v.string(),
@@ -71,6 +73,7 @@ export const update = mutation({
   args: {
     id: v.id("contracts"),
     number: v.string(),
+    name: v.optional(v.string()),
     companyId: v.id("companies"),
     operatorId: v.id("operators"),
     type: v.string(),

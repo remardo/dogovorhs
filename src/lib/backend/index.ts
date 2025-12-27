@@ -62,6 +62,7 @@ export type ContractOption = { id: string; name: string };
 export type Contract = {
   id: string;
   number: string;
+  name?: string;
   companyId: string;
   company: string;
   operatorId: string;
@@ -864,6 +865,7 @@ export function useContracts() {
     try {
       await convexClient.mutation("contracts:create", {
         number: payload.number,
+        name: payload.name,
         companyId: payload.companyId as Id<"companies">,
         operatorId: payload.operatorId as Id<"operators">,
         type: payload.type,
@@ -901,6 +903,7 @@ export function useContracts() {
       await convexClient.mutation("contracts:update", {
         id: payload.id as Id<"contracts">,
         number: payload.number,
+        name: payload.name,
         companyId: payload.companyId as Id<"companies">,
         operatorId: payload.operatorId as Id<"operators">,
         type: payload.type,
