@@ -51,8 +51,10 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 const Tariffs = () => {
-  const { items: tariffs, operators, createTariff, deleteTariff } = useTariffs();
+  const { items: tariffs, operators, createTariff, updateTariff, deleteTariff } = useTariffs();
   const [open, setOpen] = React.useState(false);
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [editTariff, setEditTariff] = React.useState<(typeof tariffs)[number] | null>(null);
   const [search, setSearch] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
@@ -99,6 +101,37 @@ const Tariffs = () => {
       sms: null,
       status: "active",
     });
+  };
+
+  const editForm = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+  });
+
+  React.useEffect(() => {
+    if (!editTariff) return;
+    editForm.reset({
+      name: editTariff.name,
+      operatorId: editTariff.operatorId,
+      type: editTariff.type,
+      monthlyFee: editTariff.monthlyFee,
+      dataLimitGb: editTariff.dataLimitGb,
+      minutes: editTariff.minutes,
+      sms: editTariff.sms,
+      status: editTariff.status,
+    });
+  }, [editTariff, editForm]);
+
+  const onEditSubmit = async (values: FormValues) => {
+    if (!editTariff) return;
+    await updateTariff({
+      ...editTariff,
+      ...values,
+      dataLimitGb: values.dataLimitGb ?? null,
+      minutes: values.minutes ?? null,
+      sms: values.sms ?? null,
+    });
+    toast({ title: "Тариф обновлен" });
+    setEditOpen(false);
   };
 
   const filteredTariffs = React.useMemo(() => {
@@ -362,7 +395,12 @@ const Tariffs = () => {
                         <Eye className="h-4 w-4 mr-2" />
                         Просмотр
                       </DropdownMenuItem>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          setEditTariff(tariff);
+                          setEditOpen(true);
+                        }}
+                      >
                         <Pencil className="h-4 w-4 mr-2" />
                         Редактировать
                       </DropdownMenuItem>
@@ -390,6 +428,148 @@ const Tariffs = () => {
           </tbody>
         </table>
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Редактировать тариф</DialogTitle>
+            <DialogDescription>Измените параметры тарифа.</DialogDescription>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={editForm.handleSubmit(onEditSubmit)}>
+              <FormField
+                control={editForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Название</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Корпоративный Безлимит" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="operatorId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Оператор</FormLabel>
+                    <FormControl>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Выберите оператора" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {operators.map((op) => (
+                            <SelectItem key={op.id} value={op.id}>
+                              {op.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Тип</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Мобильная связь, Интернет, M2M..." {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="monthlyFee"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Абонплата, ₽/мес</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={0} step={50} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="dataLimitGb"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Интернет, ГБ (пусто - нет)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Напр. 30" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="minutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Минуты (пусто - нет)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Напр. 500" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="sms"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>SMS (пусто - нет)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Напр. 100" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={editForm.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Статус</FormLabel>
+                    <FormControl>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Статус" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Активен</SelectItem>
+                          <SelectItem value="archive">Архив</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="md:col-span-2 flex justify-end gap-2 pt-2">
+                <Button variant="outline" type="button" onClick={() => setEditOpen(false)}>
+                  Отмена
+                </Button>
+                <Button type="submit">Сохранить</Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 };

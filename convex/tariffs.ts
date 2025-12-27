@@ -78,3 +78,27 @@ export const remove = mutation({
     return { ok: true };
   },
 });
+
+export const update = mutation({
+  args: {
+    id: v.id("tariffs"),
+    name: v.string(),
+    operatorId: v.id("operators"),
+    monthlyFee: v.number(),
+    dataLimitGb: v.optional(v.number()),
+    minutes: v.optional(v.number()),
+    sms: v.optional(v.number()),
+    status: v.union(v.literal("active"), v.literal("archive")),
+  },
+  handler: async (ctx, args) => {
+    await requireAuthIfEnabled(ctx);
+    const { db } = ctx;
+    const { id, ...rest } = args;
+    const operator = await db.get(rest.operatorId);
+    if (!operator) {
+      throw new Error("Оператор не найден");
+    }
+    await db.patch(id, rest);
+    return { ok: true };
+  },
+});

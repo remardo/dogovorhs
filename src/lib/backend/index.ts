@@ -1159,6 +1159,39 @@ export function useTariffs() {
     }
   };
 
+  const updateTariff = async (payload: Tariff) => {
+    const updateLocal = () =>
+      setData((prev) => ({
+        ...prev,
+        items: prev.items.map((t) => (t.id === payload.id ? payload : t)),
+      }));
+
+    if (!convexClient || !backendAvailable) {
+      notifyDemoMode();
+      updateLocal();
+      return;
+    }
+
+    try {
+      await convexClient.mutation("tariffs:update", {
+        id: payload.id as Id<"tariffs">,
+        name: payload.name,
+        operatorId: payload.operatorId as Id<"operators">,
+        monthlyFee: payload.monthlyFee,
+        dataLimitGb: payload.dataLimitGb ?? undefined,
+        minutes: payload.minutes ?? undefined,
+        sms: payload.sms ?? undefined,
+        status: payload.status,
+      });
+      const res = await convexClient.query("tariffs:list", {});
+      setData(res as typeof data);
+    } catch (err) {
+      console.warn("tariffs:update fallback to local demo data", err);
+      notifyBackendError();
+      updateLocal();
+    }
+  };
+
   const deleteTariff = async (id: string) => {
     const removeLocal = () => setData((prev) => ({ ...prev, items: prev.items.filter((t) => t.id !== id) }));
     if (!convexClient || !backendAvailable) {
@@ -1177,7 +1210,7 @@ export function useTariffs() {
     }
   };
 
-  return { ...data, createTariff, deleteTariff };
+  return { ...data, createTariff, updateTariff, deleteTariff };
 }
 
 export function useExpenses() {

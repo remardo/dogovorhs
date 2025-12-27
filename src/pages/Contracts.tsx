@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
 
+const NONE = "__none";
+
 const formSchema = z.object({
   number: z.string().min(3, "Введите номер договора"),
   companyId: z.string().min(1, "Выберите компанию"),
@@ -48,7 +50,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 const Contracts = () => {
   const { items: contracts, companies, operators, createContract, updateContract, deleteContract } = useContracts();
-  const { items: simCards } = useSimCards();
+  const { items: simCards, tariffs, updateSimCard } = useSimCards();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [viewContract, setViewContract] = useState<Contract | null>(null);
@@ -120,6 +122,17 @@ const Contracts = () => {
       return matchesSearch && matchesCompany && matchesOperator && matchesStatus;
     });
   }, [contracts, search, companyFilter, operatorFilter, statusFilter]);
+
+  const handleSimTariffChange = async (sim: SimCard, value: string) => {
+    const tariffId = value === NONE ? undefined : value;
+    const tariffName = tariffs.find((t) => t.id === value)?.name ?? "";
+    await updateSimCard({
+      ...sim,
+      tariffId,
+      tariff: tariffId ? tariffName : "",
+    });
+    toast({ title: "Тариф SIM обновлен" });
+  };
 
   const contractSimCards = React.useMemo(() => {
     if (!viewContract) return [] as SimCard[];
@@ -532,7 +545,24 @@ const Contracts = () => {
                         {contractSimCards.map((sim) => (
                           <tr key={sim.id} className="border-t border-border">
                             <td className="px-3 py-2">{sim.number}</td>
-                            <td className="px-3 py-2">{sim.tariff || sim.type || "-"}</td>
+                            <td className="px-3 py-2">
+                              <Select
+                                value={sim.tariffId ?? NONE}
+                                onValueChange={(value) => handleSimTariffChange(sim, value)}
+                              >
+                                <SelectTrigger className="h-8">
+                                  <SelectValue placeholder="Без тарифа" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={NONE}>Без тарифа</SelectItem>
+                                  {tariffs.map((t) => (
+                                    <SelectItem key={t.id} value={t.id}>
+                                      {t.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
                             <td className="px-3 py-2">
                               {sim.status === "active" ? "Активна" : "Заблокирована"}
                             </td>

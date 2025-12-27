@@ -60,6 +60,7 @@ const SimCards = () => {
   const [open, setOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [viewSim, setViewSim] = React.useState<SimCard | null>(null);
+  const [viewTariffId, setViewTariffId] = React.useState(NONE);
   const [editSim, setEditSim] = React.useState<SimCard | null>(null);
   const [search, setSearch] = React.useState("");
   const [companyFilter, setCompanyFilter] = React.useState("all");
@@ -207,6 +208,34 @@ const SimCards = () => {
       return expenseVariants.some((variant) => variants.includes(variant));
     });
   }, [expenses, viewSim]);
+
+  React.useEffect(() => {
+    if (!viewSim) {
+      setViewTariffId(NONE);
+      return;
+    }
+    setViewTariffId(viewSim.tariffId ?? NONE);
+  }, [viewSim]);
+
+  const handleViewTariffChange = async (value: string) => {
+    if (!viewSim) return;
+    const tariffId = value === NONE ? undefined : value;
+    const tariffName = tariffs.find((t) => t.id === value)?.name ?? "";
+    const updated: SimCard = {
+      ...viewSim,
+      tariffId,
+      tariff: tariffId ? tariffName : "",
+    };
+    setViewSim(updated);
+    setViewTariffId(value);
+    try {
+      await updateSimCard(updated);
+      toast({ title: "Тариф обновлен" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не удалось обновить тариф";
+      toast({ title: message, variant: "destructive" });
+    }
+  };
 
   return (
     <MainLayout
@@ -616,7 +645,21 @@ const SimCards = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Тариф</span>
-                  <span className="font-medium">{viewSim.tariff || "-"}</span>
+                  <span className="font-medium w-56">
+                    <Select value={viewTariffId} onValueChange={handleViewTariffChange}>
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder="Без тарифа" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>Без тарифа</SelectItem>
+                        {tariffs.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </span>
                 </div>
               </div>
 
