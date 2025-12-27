@@ -60,6 +60,13 @@ export const remove = mutation({
     await requireAuthIfEnabled(ctx);
     const record = await ctx.db.get(id);
     if (!record) return { ok: false };
+    const expenses = await ctx.db
+      .query("expenses")
+      .withIndex("by_import", (q) => q.eq("importId", id))
+      .collect();
+    for (const expense of expenses) {
+      await ctx.db.delete(expense._id);
+    }
     await ctx.storage.delete(record.fileId);
     await ctx.db.delete(id);
     return { ok: true };
@@ -442,6 +449,7 @@ export const applyParsed = mutation({
         simNumber,
         contract: row.contractNumber,
         operator: operatorName,
+        importId: args.id,
         vat: row.vat,
         total: row.total,
         status: "confirmed",

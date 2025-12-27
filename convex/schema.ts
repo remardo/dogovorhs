@@ -90,6 +90,7 @@ export default defineSchema({
     simNumber: v.optional(v.string()),
     contract: v.optional(v.string()),
     operator: v.optional(v.string()),
+    importId: v.optional(v.id("billingImports")),
     vat: v.optional(v.number()),
     total: v.optional(v.number()),
     status: v.optional(v.union(v.literal("confirmed"), v.literal("draft"), v.literal("adjusted"))),
@@ -99,7 +100,8 @@ export default defineSchema({
     .index("by_company", ["companyId"])
     .index("by_created", ["createdAt"])
     .index("by_month", ["month"])
-    .index("by_company_month", ["companyId", "month"]),
+    .index("by_company_month", ["companyId", "month"])
+    .index("by_import", ["importId"]),
 
   billingImports: defineTable({
     fileId: v.id("_storage"),

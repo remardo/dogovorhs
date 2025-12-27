@@ -135,6 +135,7 @@ export type Expense = {
   vat: number;
   total: number;
   simNumber?: string;
+  importId?: string;
   status: "confirmed" | "draft" | "adjusted";
   hasDocument: boolean;
 };
