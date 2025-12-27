@@ -26,6 +26,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
+import { useSearchParams } from "react-router-dom";
 
 const NONE = "__none";
 
@@ -57,12 +58,13 @@ const SimCards = () => {
   const { items: simCards, companies, operators, employees, tariffs, createSimCard, updateSimCard, deleteSimCard } =
     useSimCards();
   const { items: expenses } = useExpenses();
+  const [searchParams] = useSearchParams();
   const [open, setOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [viewSim, setViewSim] = React.useState<SimCard | null>(null);
   const [viewTariffId, setViewTariffId] = React.useState(NONE);
   const [editSim, setEditSim] = React.useState<SimCard | null>(null);
-  const [search, setSearch] = React.useState("");
+  const [search, setSearch] = React.useState(searchParams.get("q") ?? "");
   const [companyFilter, setCompanyFilter] = React.useState("all");
   const [operatorFilter, setOperatorFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
@@ -90,6 +92,10 @@ const SimCards = () => {
       form.setValue("operatorId", pickFirstOrNone(operators, NONE));
     }
   }, [companies, operators, form]);
+
+  React.useEffect(() => {
+    setSearch(searchParams.get("q") ?? "");
+  }, [searchParams]);
 
   const onSubmit = async (values: FormValues) => {
     if (!values.companyId || values.companyId === NONE) {

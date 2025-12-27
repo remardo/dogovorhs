@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "prepare": "husky install",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy"
   },
@@ -69,6 +70,8 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@tailwindcss/typography": "^0.5.16",
+    "@testing-library/jest-dom": "^6.4.6",
+    "@testing-library/react": "^16.0.1",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
@@ -78,6 +81,8 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
+    "husky": "^9.1.7",
+    "jsdom": "^24.1.1",
     "lovable-tagger": "^1.1.11",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",

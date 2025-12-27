@@ -1,3 +1,5 @@
+"use node";
+
 import type { ImportRow } from "./billingImportParser";
 import { createRequire } from "module";
 import { pathToFileURL } from "url";
@@ -62,7 +64,7 @@ function monthLabel(dateText: string): string {
 
 async function extractLines(data: ArrayBuffer): Promise<TextLine[]> {
   const pdfjs = await loadPdfJs();
-  const doc = await pdfjs.getDocument({ data, disableWorker: true }).promise;
+  const doc = await pdfjs.getDocument({ data, disableWorker: true } as any).promise;
   const lines: TextLine[] = [];
   for (let pageIndex = 1; pageIndex <= doc.numPages; pageIndex += 1) {
     const page = await doc.getPage(pageIndex);

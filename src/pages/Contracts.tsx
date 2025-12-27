@@ -31,6 +31,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
+import { useSearchParams } from "react-router-dom";
 
 const NONE = "__none";
 
@@ -52,11 +53,12 @@ type FormValues = z.infer<typeof formSchema>;
 const Contracts = () => {
   const { items: contracts, companies, operators, createContract, updateContract, deleteContract } = useContracts();
   const { items: simCards, tariffs, updateSimCard } = useSimCards();
+  const [searchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [viewContract, setViewContract] = useState<Contract | null>(null);
   const [editContract, setEditContract] = useState<Contract | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("q") ?? "");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [operatorFilter, setOperatorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -93,6 +95,10 @@ const Contracts = () => {
       form.setValue("operatorId", operators[0].id);
     }
   }, [companyId, companies, form, operatorId, operators]);
+
+  useEffect(() => {
+    setSearch(searchParams.get("q") ?? "");
+  }, [searchParams]);
 
   const onSubmit = async (values: FormValues) => {
     await createContract(values);

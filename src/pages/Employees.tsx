@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
+import { useSearchParams } from "react-router-dom";
 
 const formSchema = z.object({
   name: z.string().min(2, "Введите ФИО"),
@@ -42,12 +43,13 @@ const Employees = () => {
   const { items: employees, createEmployee, updateEmployee, deleteEmployee } = useEmployeesWithMutations();
   const { items: companies } = useCompanies();
   const { items: simCards, updateSimCard } = useSimCards();
+  const [searchParams] = useSearchParams();
   const [open, setOpen] = React.useState(false);
   const [viewEmployee, setViewEmployee] = React.useState<Employee | null>(null);
   const [editEmployee, setEditEmployee] = React.useState<Employee | null>(null);
   const [editOpen, setEditOpen] = React.useState(false);
   const [assignSimId, setAssignSimId] = React.useState<string>("__none");
-  const [search, setSearch] = React.useState("");
+  const [search, setSearch] = React.useState(searchParams.get("q") ?? "");
   const [companyFilter, setCompanyFilter] = React.useState<string>("all");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
 
@@ -73,6 +75,10 @@ const Employees = () => {
       form.setValue("companyId", companies[0].id);
     }
   }, [companies, form]);
+
+  React.useEffect(() => {
+    setSearch(searchParams.get("q") ?? "");
+  }, [searchParams]);
 
   React.useEffect(() => {
     if (!editEmployee) return;
