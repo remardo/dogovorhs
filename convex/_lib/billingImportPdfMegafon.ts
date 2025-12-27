@@ -198,5 +198,8 @@ async function loadPdfJs() {
     globalThis.structuredClone = ((value: unknown) => JSON.parse(JSON.stringify(value))) as typeof structuredClone;
   }
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  if (pdfjs.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc = "data:application/javascript;base64,";
+  }
   return pdfjs;
 }
