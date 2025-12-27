@@ -1419,7 +1419,6 @@ const Expenses = () => {
               <th>SIM/Услуга</th>
               <th>Компания</th>
               <th>Оператор</th>
-              <th>SIM</th>
               <th>Период</th>
               <th>Сумма (с НДС)</th>
               <th className="w-12"></th>
@@ -1429,9 +1428,7 @@ const Expenses = () => {
             {filteredExpenses.map((expense) => {
               const isMobile = expense.type.toLowerCase().includes("мобиль");
               const contractName = expense.contract ? contractNameByNumber.get(expense.contract) : "";
-              const primaryLabel = isMobile
-                ? expense.simNumber || "-"
-                : contractName || expense.contract || "-";
+              const primaryLabel = isMobile ? expense.simNumber || "-" : contractName || "-";
               return (
               <tr
                 key={expense.id}
@@ -1448,7 +1445,6 @@ const Expenses = () => {
                 </td>
                 <td>{expense.company}</td>
                 <td>{expense.operator || "-"}</td>
-                <td>{expense.simNumber || "-"}</td>
                 <td>{expense.month}</td>
                 <td className="font-medium">{expense.total.toLocaleString("ru-RU")} RUB</td>
                 <td>
