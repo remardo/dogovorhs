@@ -1,4 +1,6 @@
 import type { ImportRow } from "./billingImportParser";
+import { createRequire } from "module";
+import { pathToFileURL } from "url";
 
 type TextLine = { text: string };
 
@@ -199,7 +201,9 @@ async function loadPdfJs() {
   }
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   if (pdfjs.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = "data:application/javascript;base64,";
+    const require = createRequire(import.meta.url);
+    const workerPath = require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs");
+    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
   }
   return pdfjs;
 }
