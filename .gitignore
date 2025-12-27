@@ -25,6 +25,7 @@ coverage/
 *.xls
 *.xlsx
 *.csv
+*.pdf
 
 # Convex
 convex/_generated/

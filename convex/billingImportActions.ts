@@ -2,6 +2,7 @@ import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAuthIfEnabled } from "./_lib/auth";
 import { parseRows, phoneVariants } from "./_lib/billingImportParser";
+import { parseMegafonPdfRows } from "./_lib/billingImportPdfMegafon";
 import { applyVatDistribution, vatGroupKey } from "./_lib/vatDistribution";
 import type { Id } from "./_generated/dataModel";
 
@@ -12,6 +13,13 @@ async function loadImportFile(
   const file = await ctx.storage.get(fileId);
   if (!file) throw new Error("Файл не найден");
   return await file.arrayBuffer();
+}
+
+async function parseImportRows(fileName: string, data: ArrayBuffer) {
+  if (fileName.toLowerCase().endsWith(".pdf")) {
+    return await parseMegafonPdfRows(data);
+  }
+  return parseRows(data);
 }
 
 type ContractInfo = { number: string; operatorId: Id<"operators"> };
@@ -77,7 +85,7 @@ export const preview = action({
     if (!record) throw new Error("Импорт не найден");
 
     const data = await loadImportFile(ctx, record.fileId);
-    const parsedRows = parseRows(data);
+    const parsedRows = await parseImportRows(record.fileName, data);
     const { rows, vatMismatches, distributedGroups } = applyVatDistribution(parsedRows);
 
     const { contracts, operators, simCards, tariffs } = (await ctx.runQuery(
@@ -305,7 +313,7 @@ export const apply = action({
     await requireAuthIfEnabled(ctx);
     const record = (await ctx.runQuery(getImportRef, { id: args.id })) as ImportRecord;
     if (!record) throw new Error("Импорт не найден");
-    const parsedRows = args.rows ?? parseRows(await loadImportFile(ctx, record.fileId));
+    const parsedRows = args.rows ?? (await parseImportRows(record.fileName, await loadImportFile(ctx, record.fileId)));
     const { rows, distributedGroups } = applyVatDistribution(parsedRows);
     const vatDistributionKeys = Array.from(distributedGroups.values());
     return (await ctx.runMutation(applyParsedRef, {

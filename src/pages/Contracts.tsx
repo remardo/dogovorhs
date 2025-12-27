@@ -117,7 +117,8 @@ const Contracts = () => {
     return contracts.filter((c) => {
       const matchesSearch =
         c.number.toLowerCase().includes(search.toLowerCase()) ||
-        c.type.toLowerCase().includes(search.toLowerCase());
+        c.type.toLowerCase().includes(search.toLowerCase()) ||
+        (c.name ?? "").toLowerCase().includes(search.toLowerCase());
       const matchesCompany = companyFilter === "all" || c.companyId === companyFilter;
       const matchesOperator = operatorFilter === "all" || c.operatorId === operatorFilter;
       const matchesStatus = statusFilter === "all" || c.status === statusFilter;
