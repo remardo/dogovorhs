@@ -204,7 +204,7 @@ const Expenses = () => {
     } finally {
       setImportHistoryBusy(false);
     }
-  }, [convexClient, toast]);
+  }, []);
 
   const handleDeleteImport = async (id: string) => {
     if (!convexClient) return;

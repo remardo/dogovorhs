@@ -8,6 +8,7 @@ import { parseMegafonPdfRows } from "./_lib/billingImportPdfMegafon";
 import { parseMegafonCsvRows } from "./_lib/billingImportCsvMegafon";
 import { applyVatDistribution, vatGroupKey } from "./_lib/vatDistribution";
 import type { Id } from "./_generated/dataModel";
+import { api } from "./_generated/api";
 
 async function loadImportFile(
   ctx: { storage: { get: (id: Id<"_storage">) => Promise<Blob | null> } },
@@ -80,16 +81,11 @@ type PreviewResponse = {
 
 type ApplyResult = { ok: boolean; status: string; missingContracts?: string[] };
 
-const getImportRef = "billingImports:get" as any;
-const getContextRef = "billingImports:getContext" as any;
-const updatePreviewRef = "billingImports:updatePreviewSummary" as any;
-const applyParsedRef = "billingImports:applyParsed" as any;
-
 export const preview = action({
   args: { id: v.id("billingImports") },
   handler: async (ctx, { id }): Promise<PreviewResponse> => {
     await requireAuthIfEnabled(ctx);
-    const record = (await ctx.runQuery(getImportRef, { id })) as ImportRecord;
+    const record = (await ctx.runQuery(api.billingImports.get, { id })) as ImportRecord;
     if (!record) throw new Error("Импорт не найден");
 
     const data = await loadImportFile(ctx, record.fileId);
@@ -97,7 +93,7 @@ export const preview = action({
     const { rows, vatMismatches, distributedGroups } = applyVatDistribution(parsedRows);
 
     const { contracts, operators, simCards, tariffs } = (await ctx.runQuery(
-      getContextRef,
+      api.billingImports.getContext,
       {},
     )) as ImportContext;
 
@@ -219,7 +215,7 @@ export const preview = action({
       missingTariffs: Array.from(missingTariffs.values()),
     };
 
-    await ctx.runMutation(updatePreviewRef, {
+    await ctx.runMutation(api.billingImports.updatePreviewSummary, {
       id,
       summary: {
         rows: rows.length,
@@ -319,12 +315,12 @@ export const apply = action({
   },
   handler: async (ctx, args): Promise<ApplyResult> => {
     await requireAuthIfEnabled(ctx);
-    const record = (await ctx.runQuery(getImportRef, { id: args.id })) as ImportRecord;
+    const record = (await ctx.runQuery(api.billingImports.get, { id: args.id })) as ImportRecord;
     if (!record) throw new Error("Импорт не найден");
     const parsedRows = args.rows ?? (await parseImportRows(record.fileName, await loadImportFile(ctx, record.fileId)));
     const { rows, distributedGroups } = applyVatDistribution(parsedRows);
     const vatDistributionKeys = Array.from(distributedGroups.values());
-    return (await ctx.runMutation(applyParsedRef, {
+    return (await ctx.runMutation(api.billingImports.applyParsed, {
       ...args,
       rows,
       vatDistributionKeys,

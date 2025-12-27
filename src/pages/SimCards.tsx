@@ -30,6 +30,27 @@ import { useSearchParams } from "react-router-dom";
 
 const NONE = "__none";
 
+const normalizePhone = (value: string) => value.replace(/\D/g, "");
+const canonicalPhone = (value: string) => {
+  const normalized = normalizePhone(value);
+  if (!normalized) return "";
+  if (normalized.length === 11 && normalized.startsWith("7")) {
+    return normalized.slice(1);
+  }
+  return normalized;
+};
+const phoneVariants = (value: string) => {
+  const normalized = normalizePhone(value);
+  if (!normalized) return [] as string[];
+  if (normalized.length === 11 && normalized.startsWith("7")) {
+    return [normalized, normalized.slice(1)];
+  }
+  if (normalized.length === 10) {
+    return [normalized, `7${normalized}`];
+  }
+  return [normalized];
+};
+
 const formSchema = z.object({
   number: z.string().min(5, "Введите номер"),
   iccid: z.string().optional(),
@@ -171,27 +192,6 @@ const SimCards = () => {
       }),
     [simCards, search, companyFilter, operatorFilter, statusFilter, typeFilter],
   );
-
-  const normalizePhone = (value: string) => value.replace(/\D/g, "");
-  const canonicalPhone = (value: string) => {
-    const normalized = normalizePhone(value);
-    if (!normalized) return "";
-    if (normalized.length === 11 && normalized.startsWith("7")) {
-      return normalized.slice(1);
-    }
-    return normalized;
-  };
-  const phoneVariants = (value: string) => {
-    const normalized = normalizePhone(value);
-    if (!normalized) return [] as string[];
-    if (normalized.length === 11 && normalized.startsWith("7")) {
-      return [normalized, normalized.slice(1)];
-    }
-    if (normalized.length === 10) {
-      return [normalized, `7${normalized}`];
-    }
-    return [normalized];
-  };
 
   const expenseTotalsByPhone = React.useMemo(() => {
     const totals = new Map<string, number>();
