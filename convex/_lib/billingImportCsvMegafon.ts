@@ -122,7 +122,7 @@ export function parseMegafonCsvRows(data: ArrayBuffer): ImportRow[] {
     if (total <= 0 && vat <= 0 && amount <= 0) return;
     rows.push({
       rowIndex: rows.length + 1,
-      phone,
+      phone: phone.length === 10 ? `7${phone}` : phone,
       contractNumber: meta.contractNumber,
       tariffName: currentTariff,
       periodStart: meta.periodStart,

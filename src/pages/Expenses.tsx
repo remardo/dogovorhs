@@ -1428,7 +1428,7 @@ const Expenses = () => {
             {filteredExpenses.map((expense) => {
               const isMobile = expense.type.toLowerCase().includes("мобиль");
               const contractName = expense.contract ? contractNameByNumber.get(expense.contract) : "";
-              const primaryLabel = isMobile ? expense.simNumber || "-" : contractName || "-";
+              const primaryLabel = expense.simNumber || (isMobile ? "-" : contractName || "-");
               return (
               <tr
                 key={expense.id}
