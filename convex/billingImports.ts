@@ -3,35 +3,13 @@ import { v } from "convex/values";
 import { requireAuthIfEnabled } from "./_lib/auth";
 import type { Id } from "./_generated/dataModel";
 import { phoneVariants } from "./_lib/billingImportParser";
-
-type NormalizedCompanyName = {
-  raw: string;
-  normalized: string;
-};
-
-type NormalizedCompany = NormalizedCompanyName & { id: Id<"companies"> };
-
-
-function normalizeName(value: string): NormalizedCompanyName {
-  const raw = value.trim();
-  const normalized = raw
-    .toLowerCase()
-    .replace(/["'`]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return { raw, normalized };
-}
-
-function findSimilarCompanies(target: NormalizedCompanyName, companies: NormalizedCompany[]) {
-  if (!target.normalized) return [];
-  return companies.filter((c) => {
-    if (!c.normalized) return false;
-    if (c.normalized === target.normalized) return true;
-    if (c.normalized.includes(target.normalized)) return true;
-    if (target.normalized.includes(c.normalized)) return true;
-    return false;
-  });
-}
+import {
+  buildTariffFeeByKey,
+  collectCompanyConflicts,
+  collectMissingContracts,
+  normalizeCompanyName,
+  type NormalizedCompany,
+} from "./_lib/billingImportLogic";
 
 export const requestUpload = mutation(async (ctx) => {
   await requireAuthIfEnabled(ctx);
@@ -185,28 +163,16 @@ export const applyParsed = mutation({
       ctx.db.query("tariffs").collect(),
     ]);
 
-    const normalizedCompanies: NormalizedCompany[] = companies.map((c) => ({
+    const normalizedCompanies: NormalizedCompany<Id<"companies">>[] = companies.map((c) => ({
       id: c._id,
-      ...normalizeName(c.name),
+      ...normalizeCompanyName(c.name),
     }));
 
     const createCompanyRequests = args.contractResolutions.filter(
       (c): c is typeof c & { company: { mode: "create"; name: string; inn?: string; kpp?: string; comment?: string; forceCreate?: boolean } } =>
         c.company.mode === "create",
     );
-    const companyConflicts = createCompanyRequests.flatMap((c) => {
-      const target = normalizeName(c.company.name);
-      if (c.company.forceCreate) return [];
-      const suggestions = findSimilarCompanies(target, normalizedCompanies);
-      if (!suggestions.length) return [];
-      return [
-        {
-          contractNumber: c.contractNumber,
-          name: c.company.name,
-          suggestions: suggestions.map((s) => ({ id: s.id, name: s.raw })),
-        },
-      ];
-    });
+    const companyConflicts = collectCompanyConflicts(createCompanyRequests, normalizedCompanies);
 
     if (companyConflicts.length) {
       return { ok: false, status: "needs_confirmation", companyConflicts };
@@ -219,17 +185,16 @@ export const applyParsed = mutation({
     );
 
     const resolvedContractNumbers = new Set(args.contractResolutions.map((c) => c.contractNumber));
-    const missingContracts = new Set<string>();
-    rows.forEach((row) => {
-      if (!contractByNumber.has(row.contractNumber) && !resolvedContractNumbers.has(row.contractNumber)) {
-        missingContracts.add(row.contractNumber);
-      }
-    });
-    if (missingContracts.size) {
+    const missingContracts = collectMissingContracts(
+      rows,
+      new Set(contractByNumber.keys()),
+      resolvedContractNumbers,
+    );
+    if (missingContracts.length) {
       return {
         ok: false,
         status: "missing_contracts",
-        missingContracts: Array.from(missingContracts.values()),
+        missingContracts,
       };
     }
 
@@ -239,7 +204,7 @@ export const applyParsed = mutation({
     let simCardsCreated = 0;
     let expensesCreated = 0;
     for (const resolution of createCompanyRequests) {
-      const nameKey = normalizeName(resolution.company.name).normalized;
+      const nameKey = normalizeCompanyName(resolution.company.name).normalized;
       if (createdCompanies.has(nameKey)) continue;
       const createdAt = Date.now();
       const companyId = await ctx.db.insert("companies", {
@@ -258,7 +223,7 @@ export const applyParsed = mutation({
 
     const getCompanyId = (resolution: (typeof args.contractResolutions)[number]): Id<"companies"> => {
       if (resolution.company.mode === "existing") return resolution.company.id;
-      const key = normalizeName(resolution.company.name).normalized;
+      const key = normalizeCompanyName(resolution.company.name).normalized;
       const created = createdCompanies.get(key);
       if (created) return created;
       throw new Error(`Не удалось создать компанию: ${resolution.company.name}`);
@@ -344,15 +309,7 @@ export const applyParsed = mutation({
       }
     });
 
-    const tariffFeeByKey = new Map<string, number>();
-    for (const row of rows) {
-      if (!row.tariffName) continue;
-      const contract = contractByNumber.get(row.contractNumber);
-      if (!contract) continue;
-      const key = `${contract.operatorId}:${row.tariffName.toLowerCase().trim()}`;
-      const current = tariffFeeByKey.get(key) ?? 0;
-      if (row.tariffFee > current) tariffFeeByKey.set(key, row.tariffFee);
-    }
+    const tariffFeeByKey = buildTariffFeeByKey(rows, contractByNumber);
 
     const overrideFees = new Map(
       (args.tariffOverrides ?? []).map((t) => [
@@ -432,12 +389,26 @@ export const applyParsed = mutation({
       if (!contract) continue;
       const operatorName = operatorNameById.get(contract.operatorId) ?? "Оператор";
       const expenseType = row.isVatOnly ? "НДС" : row.tariffName || "Начисления по счету";
+      let simNumber: string | undefined;
+      if (!row.isVatOnly && row.phone) {
+        const variants = phoneVariants(row.phone);
+        for (const variant of variants) {
+          const sim = simByPhone.get(variant);
+          if (sim?.number) {
+            simNumber = sim.number;
+            break;
+          }
+        }
+        if (!simNumber) {
+          simNumber = row.phone;
+        }
+      }
       await ctx.db.insert("expenses", {
         companyId: contract.companyId,
         type: expenseType,
         amount: row.amount,
         month: row.month,
-        simNumber: row.isVatOnly ? undefined : row.phone || undefined,
+        simNumber,
         contract: row.contractNumber,
         operator: operatorName,
         vat: row.vat,

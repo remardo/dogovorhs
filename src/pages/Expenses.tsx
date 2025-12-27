@@ -1133,7 +1133,6 @@ const Expenses = () => {
           </thead>
           <tbody>
             {filteredExpenses.map((expense) => {
-              const isMobile = expense.type.toLowerCase().includes("мобиль");
               return (
               <tr
                 key={expense.id}
@@ -1150,7 +1149,7 @@ const Expenses = () => {
                 </td>
                 <td>{expense.company}</td>
                 <td>{expense.operator || "-"}</td>
-                <td>{isMobile ? expense.simNumber || "-" : "-"}</td>
+                <td>{expense.simNumber || "-"}</td>
                 <td>{expense.month}</td>
                 <td className="font-medium">{expense.total.toLocaleString("ru-RU")} RUB</td>
                 <td>

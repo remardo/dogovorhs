@@ -38,11 +38,6 @@ const formSchema = z.object({
   operatorId: z.string().min(1, "Выберите оператора").refine((v) => v !== NONE, "Выберите оператора"),
   employeeId: z.string().default(NONE),
   tariffId: z.string().default(NONE),
-  limit: z
-    .string()
-    .optional()
-    .transform((v) => (v ? Number(v) : undefined))
-    .refine((v) => v === undefined || !Number.isNaN(v), "Введите число или оставьте пустым"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -83,7 +78,6 @@ const SimCards = () => {
       operatorId: pickFirstOrNone(operators, NONE),
       employeeId: NONE,
       tariffId: NONE,
-      limit: undefined,
     },
   });
 
@@ -128,7 +122,6 @@ const SimCards = () => {
       operatorId: pickFirstOrNone(operators, NONE),
       employeeId: NONE,
       tariffId: NONE,
-      limit: undefined,
     });
   };
 
@@ -143,7 +136,6 @@ const SimCards = () => {
       operatorId: operators[0]?.id ?? NONE,
       employeeId: NONE,
       tariffId: NONE,
-      limit: undefined,
     },
   });
 
@@ -174,6 +166,14 @@ const SimCards = () => {
   );
 
   const normalizePhone = (value: string) => value.replace(/\D/g, "");
+  const canonicalPhone = (value: string) => {
+    const normalized = normalizePhone(value);
+    if (!normalized) return "";
+    if (normalized.length === 11 && normalized.startsWith("7")) {
+      return normalized.slice(1);
+    }
+    return normalized;
+  };
   const phoneVariants = (value: string) => {
     const normalized = normalizePhone(value);
     if (!normalized) return [] as string[];
@@ -185,6 +185,17 @@ const SimCards = () => {
     }
     return [normalized];
   };
+
+  const expenseTotalsByPhone = React.useMemo(() => {
+    const totals = new Map<string, number>();
+    expenses.forEach((expense) => {
+      if (!expense.simNumber) return;
+      const key = canonicalPhone(expense.simNumber);
+      if (!key) return;
+      totals.set(key, (totals.get(key) ?? 0) + expense.total);
+    });
+    return totals;
+  }, [expenses]);
 
   const simExpenses = React.useMemo(() => {
     if (!viewSim) return [] as Expense[];
@@ -374,19 +385,6 @@ const SimCards = () => {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="limit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Лимит, ₽ (опц.)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Напр. 3000" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <div className="md:col-span-2 flex justify-end gap-2 pt-2">
                   <Button variant="outline" type="button" onClick={() => setOpen(false)}>
                     Отмена
@@ -481,7 +479,7 @@ const SimCards = () => {
               <th>Компания</th>
               <th>Сотрудник</th>
               <th>Тариф</th>
-              <th>Лимит</th>
+              <th>Начисления</th>
               <th className="w-12"></th>
             </tr>
           </thead>
@@ -513,7 +511,9 @@ const SimCards = () => {
                 <td>
                   <span className="text-muted-foreground">{sim.tariff}</span>
                 </td>
-                <td className="font-medium">{(sim.limit ?? 0).toLocaleString("ru-RU")} RUB</td>
+                <td className="font-medium">
+                  {(expenseTotalsByPhone.get(canonicalPhone(sim.number)) ?? 0).toLocaleString("ru-RU")} RUB
+                </td>
                 <td>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -543,7 +543,6 @@ const SimCards = () => {
                             operatorId: sim.operatorId || operators[0]?.id || "",
                             employeeId: sim.employeeId ?? NONE,
                             tariffId: sim.tariffId ?? NONE,
-                            limit: sim.limit,
                           });
                           setEditOpen(true);
                         }}
@@ -618,10 +617,6 @@ const SimCards = () => {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Тариф</span>
                   <span className="font-medium">{viewSim.tariff || "-"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Лимит</span>
-                  <span className="font-medium">{(viewSim.limit ?? 0).toLocaleString("ru-RU")} RUB</span>
                 </div>
               </div>
 
@@ -828,19 +823,6 @@ const SimCards = () => {
                           ))}
                         </SelectContent>
                       </Select>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="limit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Лимит, ₽ (опц.)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Напр. 3000" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
