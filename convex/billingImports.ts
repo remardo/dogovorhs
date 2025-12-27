@@ -61,6 +61,7 @@ export const updatePreviewSummary = mutation({
       contractsMissing: v.number(),
       simCardsMissing: v.number(),
       tariffsMissing: v.number(),
+      vatMismatches: v.number(),
       totalAmount: v.number(),
       totalVat: v.number(),
       totalTotal: v.number(),
@@ -84,6 +85,7 @@ const importRowSchema = v.object({
   amount: v.number(),
   vat: v.number(),
   total: v.number(),
+  vatMismatch: v.boolean(),
   tariffFee: v.number(),
   isVatOnly: v.boolean(),
 });

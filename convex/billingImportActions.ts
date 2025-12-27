@@ -35,6 +35,7 @@ type PreviewResponse = {
     contractsMissing: number;
     simCardsMissing: number;
     tariffsMissing: number;
+    vatMismatches: number;
     totalAmount: number;
     totalVat: number;
     totalTotal: number;
@@ -50,6 +51,7 @@ type PreviewResponse = {
     amount: number;
     vat: number;
     total: number;
+    vatMismatch: boolean;
     isVatOnly: boolean;
     issues: string[];
   }[];
@@ -101,6 +103,7 @@ export const preview = action({
     let totalAmount = 0;
     let totalVat = 0;
     let totalTotal = 0;
+    let vatMismatches = 0;
 
     const previewRows = rows.map((row) => {
       const issues: string[] = [];
@@ -108,6 +111,10 @@ export const preview = action({
       totalAmount += row.amount;
       totalVat += row.vat;
       totalTotal += row.total;
+      if (row.vatMismatch) {
+        vatMismatches += 1;
+        issues.push("vatMismatch");
+      }
 
       if (!contract) {
         issues.push("missingContract");
@@ -157,6 +164,7 @@ export const preview = action({
         amount: row.amount,
         vat: row.vat,
         total: row.total,
+        vatMismatch: row.vatMismatch,
         isVatOnly: row.isVatOnly,
         issues,
       };
@@ -170,6 +178,7 @@ export const preview = action({
         contractsMissing: missingContracts.size,
         simCardsMissing: missingSimCards.size,
         tariffsMissing: missingTariffs.size,
+        vatMismatches,
         totalAmount,
         totalVat,
         totalTotal,
@@ -196,6 +205,7 @@ export const preview = action({
         contractsMissing: missingContracts.size,
         simCardsMissing: missingSimCards.size,
         tariffsMissing: missingTariffs.size,
+        vatMismatches,
         totalAmount,
         totalVat,
         totalTotal,

@@ -11,6 +11,7 @@ export type ImportRow = {
   amount: number;
   vat: number;
   total: number;
+  vatMismatch: boolean;
   tariffFee: number;
   isVatOnly: boolean;
 };
@@ -74,6 +75,10 @@ function toNumber(value: unknown): number {
   return Number.isFinite(num) ? num : 0;
 }
 
+function roundCurrency(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 function formatDate(value: unknown): string {
   if (!value) return "";
   if (value instanceof Date) {
@@ -125,18 +130,31 @@ export function parseRows(data: ArrayBuffer): ImportRow[] {
     if (!contractNumber) return;
 
     const phone = normalizePhone(row[COLUMN.phone]);
+    const isVatOnly = phone === "" || /^0+$/.test(phone);
     const tariffName = String(row[COLUMN.tariff] ?? "").trim();
     const periodStart = formatDate(row[COLUMN.periodStart]);
     const periodEnd = formatDate(row[COLUMN.periodEnd]);
     const amount = toNumber(row[COLUMN.amount]);
-    const vat = toNumber(row[COLUMN.vat]);
-    const total = toNumber(row[COLUMN.total]);
+    const vatFromTable = toNumber(row[COLUMN.vat]);
+    const totalFromTable = toNumber(row[COLUMN.total]);
     const tariffFee = toNumber(row[COLUMN.tariffFee]);
-    const resolvedTotal = total > 0 ? total : amount + vat;
+    const computedVat = roundCurrency(amount * 0.2);
+    const computedTotal = roundCurrency(amount + computedVat);
+
+    let vat = vatFromTable;
+    let resolvedTotal = totalFromTable > 0 ? totalFromTable : amount + vatFromTable;
+    let vatMismatch = false;
+
+    if (amount > 0 && !isVatOnly) {
+      vat = computedVat;
+      resolvedTotal = computedTotal;
+      const vatDiff = Math.abs(vatFromTable - computedVat);
+      const totalDiff = totalFromTable > 0 ? Math.abs(totalFromTable - computedTotal) : 0;
+      vatMismatch = vatDiff > 0.02 || totalDiff > 0.02;
+    }
 
     if (resolvedTotal <= 0 && vat <= 0 && amount <= 0) return;
 
-    const isVatOnly = phone === "" || /^0+$/.test(phone);
     const month = monthLabel(periodEnd || periodStart);
 
     rows.push({
@@ -150,6 +168,7 @@ export function parseRows(data: ArrayBuffer): ImportRow[] {
       amount,
       vat,
       total: resolvedTotal,
+      vatMismatch,
       tariffFee,
       isVatOnly,
     });

@@ -113,6 +113,7 @@ export default defineSchema({
         contractsMissing: v.number(),
         simCardsMissing: v.number(),
         tariffsMissing: v.number(),
+        vatMismatches: v.number(),
         totalAmount: v.number(),
         totalVat: v.number(),
         totalTotal: v.number(),

@@ -54,6 +54,7 @@ describe("parseRows", () => {
       amount: 1000,
       vat: 200,
       total: 1200,
+      vatMismatch: false,
       tariffFee: 500,
       isVatOnly: false,
     });
@@ -83,7 +84,8 @@ describe("parseRows", () => {
 
     const rows = parseRows(data);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.total).toBe(110);
+    expect(rows[0]?.total).toBe(120);
+    expect(rows[0]?.vatMismatch).toBe(true);
   });
 
   it("marks VAT-only rows when phone is empty or zeros", () => {
@@ -109,6 +111,8 @@ describe("parseRows", () => {
     const rows = parseRows(data);
     expect(rows[0]?.isVatOnly).toBe(true);
     expect(rows[1]?.isVatOnly).toBe(true);
+    expect(rows[0]?.vatMismatch).toBe(false);
+    expect(rows[1]?.vatMismatch).toBe(false);
   });
 
   it("skips rows without contract number", () => {

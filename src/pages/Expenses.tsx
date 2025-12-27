@@ -49,6 +49,7 @@ type ImportPreview = {
     contractsMissing: number;
     simCardsMissing: number;
     tariffsMissing: number;
+    vatMismatches: number;
     totalAmount: number;
     totalVat: number;
     totalTotal: number;
@@ -481,6 +482,7 @@ const Expenses = () => {
                         <div>Сумма без НДС: {importPreview.totals.totalAmount.toLocaleString("ru-RU")} RUB</div>
                         <div>НДС: {importPreview.totals.totalVat.toLocaleString("ru-RU")} RUB</div>
                         <div>Итого: {importPreview.totals.totalTotal.toLocaleString("ru-RU")} RUB</div>
+                        <div>Проверка НДС: {importPreview.totals.vatMismatches} ошибок</div>
                         <div>Нет договоров: {importPreview.totals.contractsMissing}</div>
                         <div>Нет SIM: {importPreview.totals.simCardsMissing}</div>
                         <div>Нет тарифов: {importPreview.totals.tariffsMissing}</div>
