@@ -73,6 +73,30 @@ type ImportPreview = {
   }[];
 };
 
+type ImportHistoryItem = {
+  _id: string;
+  fileName: string;
+  status: string;
+  createdAt: number;
+  appliedAt?: number;
+  previewSummary?: {
+    rows: number;
+    contractsMissing: number;
+    simCardsMissing: number;
+    tariffsMissing: number;
+    vatMismatches?: number;
+    totalAmount: number;
+    totalVat: number;
+    totalTotal: number;
+  };
+  appliedSummary?: {
+    expensesCreated: number;
+    simCardsCreated: number;
+    tariffsCreated: number;
+    contractsCreated: number;
+  };
+};
+
 type ContractResolutionState = {
   contractNumber: string;
   companyMode: "existing" | "create";
@@ -124,6 +148,8 @@ const Expenses = () => {
   const [importFile, setImportFile] = React.useState<File | null>(null);
   const [importPreview, setImportPreview] = React.useState<ImportPreview | null>(null);
   const [importId, setImportId] = React.useState<string | null>(null);
+  const [importHistory, setImportHistory] = React.useState<ImportHistoryItem[]>([]);
+  const [importHistoryBusy, setImportHistoryBusy] = React.useState(false);
   const [contractResolutions, setContractResolutions] = React.useState<ContractResolutionState[]>([]);
   const [simActionMap, setSimActionMap] = React.useState<Record<string, SimAction>>({});
   const [tariffOverrides, setTariffOverrides] = React.useState<Record<string, number>>({});
@@ -141,10 +167,39 @@ const Expenses = () => {
     return fromStr === toStr ? fromStr : `${fromStr} - ${toStr}`;
   };
 
+  const formatDateTime = (value?: number) => (value ? format(new Date(value), "dd.MM.yyyy HH:mm") : "-");
+
   const updateResolution = (contractNumber: string, updater: (item: ContractResolutionState) => ContractResolutionState) => {
     setContractResolutions((prev) =>
       prev.map((item) => (item.contractNumber === contractNumber ? updater(item) : item)),
     );
+  };
+
+  const loadImportHistory = React.useCallback(async () => {
+    if (!convexClient) return;
+    setImportHistoryBusy(true);
+    try {
+      const items = (await convexClient.query("billingImports:list", { limit: 20 })) as ImportHistoryItem[];
+      setImportHistory(items);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не удалось загрузить историю импорта";
+      toast({ title: message, variant: "destructive" });
+    } finally {
+      setImportHistoryBusy(false);
+    }
+  }, [convexClient, toast]);
+
+  const handleDeleteImport = async (id: string) => {
+    if (!convexClient) return;
+    if (!window.confirm("Удалить импорт и файл?")) return;
+    try {
+      await convexClient.mutation("billingImports:remove", { id });
+      await loadImportHistory();
+      toast({ title: "Импорт удален" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не удалось удалить импорт";
+      toast({ title: message, variant: "destructive" });
+    }
   };
 
   const handleImportPreview = async () => {
@@ -178,6 +233,7 @@ const Expenses = () => {
       const preview = await convexClient.action("billingImportActions:preview", { id: saved.importId });
       setImportPreview(preview as ImportPreview);
       setCompanyConflicts(null);
+      await loadImportHistory();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Ошибка импорта";
       toast({ title: "Импорт не выполнен", description: message });
@@ -245,6 +301,7 @@ const Expenses = () => {
       }
       toast({ title: "Импорт применен", description: "Данные добавлены в расходы." });
       setImportOpen(false);
+      await loadImportHistory();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Ошибка применения импорта";
       toast({ title: "Импорт не применен", description: message });
@@ -345,8 +402,11 @@ const Expenses = () => {
       setSimActionMap({});
       setTariffOverrides({});
       setCompanyConflicts(null);
+      setImportHistory([]);
+      return;
     }
-  }, [importOpen]);
+    loadImportHistory();
+  }, [importOpen, loadImportHistory]);
 
   React.useEffect(() => {
     if (!importPreview) return;
@@ -488,6 +548,51 @@ const Expenses = () => {
                         <div>Нет тарифов: {importPreview.totals.tariffsMissing}</div>
                       </div>
                     </div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-border bg-muted/10 p-4 text-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium">История импортов</div>
+                    {importHistoryBusy && <span className="text-xs text-muted-foreground">Загрузка...</span>}
+                  </div>
+                  {importHistory.length ? (
+                    <div className="mt-3 overflow-auto rounded-md border border-border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/40 text-xs text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium">Файл</th>
+                            <th className="px-3 py-2 text-left font-medium">Статус</th>
+                            <th className="px-3 py-2 text-left font-medium">Создан</th>
+                            <th className="px-3 py-2 text-left font-medium">Применен</th>
+                            <th className="px-3 py-2 text-left font-medium">Строки</th>
+                            <th className="px-3 py-2 text-right font-medium"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importHistory.map((item) => (
+                            <tr key={item._id} className="border-t border-border">
+                              <td className="px-3 py-2">{item.fileName}</td>
+                              <td className="px-3 py-2">{item.status}</td>
+                              <td className="px-3 py-2">{formatDateTime(item.createdAt)}</td>
+                              <td className="px-3 py-2">{formatDateTime(item.appliedAt)}</td>
+                              <td className="px-3 py-2">{item.previewSummary?.rows ?? "-"}</td>
+                              <td className="px-3 py-2 text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteImport(item._id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="mt-3 text-muted-foreground">История пуста</div>
                   )}
                 </div>
 

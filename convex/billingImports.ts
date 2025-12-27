@@ -42,6 +42,30 @@ export const get = query({
   },
 });
 
+export const list = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { limit }) => {
+    await requireAuthIfEnabled(ctx);
+    const items = await ctx.db.query("billingImports").collect();
+    const sorted = items.sort((a, b) => b.createdAt - a.createdAt);
+    return sorted.slice(0, limit ?? 20);
+  },
+});
+
+export const remove = mutation({
+  args: { id: v.id("billingImports") },
+  handler: async (ctx, { id }) => {
+    await requireAuthIfEnabled(ctx);
+    const record = await ctx.db.get(id);
+    if (!record) return { ok: false };
+    await ctx.storage.delete(record.fileId);
+    await ctx.db.delete(id);
+    return { ok: true };
+  },
+});
+
 export const getContext = query(async (ctx) => {
   await requireAuthIfEnabled(ctx);
   const [contracts, operators, simCards, tariffs] = await Promise.all([
