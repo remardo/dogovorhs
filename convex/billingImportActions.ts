@@ -52,6 +52,7 @@ type PreviewResponse = {
     amount: number;
     vat: number;
     total: number;
+    tariffFee: number;
     vatMismatch: boolean;
     isVatOnly: boolean;
     issues: string[];
@@ -167,6 +168,7 @@ export const preview = action({
         amount: row.amount,
         vat: row.vat,
         total: row.total,
+        tariffFee: row.tariffFee,
         vatMismatch: row.vatMismatch,
         isVatOnly: row.isVatOnly,
         issues,
@@ -222,6 +224,25 @@ export const preview = action({
 export const apply = action({
   args: {
     id: v.id("billingImports"),
+    rows: v.optional(
+      v.array(
+        v.object({
+          rowIndex: v.number(),
+          phone: v.string(),
+          contractNumber: v.string(),
+          tariffName: v.string(),
+          periodStart: v.string(),
+          periodEnd: v.string(),
+          month: v.string(),
+          amount: v.number(),
+          vat: v.number(),
+          total: v.number(),
+          tariffFee: v.number(),
+          vatMismatch: v.boolean(),
+          isVatOnly: v.boolean(),
+        }),
+      ),
+    ),
     contractResolutions: v.array(
       v.object({
         contractNumber: v.string(),
@@ -283,8 +304,7 @@ export const apply = action({
     await requireAuthIfEnabled(ctx);
     const record = (await ctx.runQuery(getImportRef, { id: args.id })) as ImportRecord;
     if (!record) throw new Error("Импорт не найден");
-    const data = await loadImportFile(ctx, record.fileId);
-    const parsedRows = parseRows(data);
+    const parsedRows = args.rows ?? parseRows(await loadImportFile(ctx, record.fileId));
     const { rows, distributedGroups } = applyVatDistribution(parsedRows);
     const vatDistributionKeys = Array.from(distributedGroups.values());
     return (await ctx.runMutation(applyParsedRef, {

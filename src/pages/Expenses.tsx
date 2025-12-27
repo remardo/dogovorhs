@@ -71,6 +71,21 @@ type ImportPreview = {
     contractNumber: string;
     tariffName: string;
   }[];
+  rows: {
+    rowIndex: number;
+    phone: string;
+    contractNumber: string;
+    tariffName: string;
+    periodStart: string;
+    periodEnd: string;
+    month: string;
+    amount: number;
+    vat: number;
+    total: number;
+    tariffFee: number;
+    vatMismatch: boolean;
+    isVatOnly: boolean;
+  }[];
 };
 
 type ImportHistoryItem = {
@@ -148,6 +163,7 @@ const Expenses = () => {
   const [importFile, setImportFile] = React.useState<File | null>(null);
   const [importPreview, setImportPreview] = React.useState<ImportPreview | null>(null);
   const [importId, setImportId] = React.useState<string | null>(null);
+  const [importRows, setImportRows] = React.useState<ImportPreview["rows"]>([]);
   const [importHistory, setImportHistory] = React.useState<ImportHistoryItem[]>([]);
   const [importHistoryBusy, setImportHistoryBusy] = React.useState(false);
   const [contractResolutions, setContractResolutions] = React.useState<ContractResolutionState[]>([]);
@@ -232,6 +248,7 @@ const Expenses = () => {
       setImportId(saved.importId as string);
       const preview = await convexClient.action("billingImportActions:preview", { id: saved.importId });
       setImportPreview(preview as ImportPreview);
+      setImportRows((preview as ImportPreview).rows);
       setCompanyConflicts(null);
       await loadImportHistory();
     } catch (error) {
@@ -248,6 +265,7 @@ const Expenses = () => {
     try {
       const payload = {
         id: importId,
+        rows: importRows,
         contractResolutions: contractResolutions.map((item) => ({
           contractNumber: item.contractNumber,
           company:
@@ -398,6 +416,7 @@ const Expenses = () => {
       setImportFile(null);
       setImportPreview(null);
       setImportId(null);
+      setImportRows([]);
       setContractResolutions([]);
       setSimActionMap({});
       setTariffOverrides({});
@@ -449,6 +468,30 @@ const Expenses = () => {
     });
     setTariffOverrides(overrides);
   }, [importPreview, companies, operators]);
+
+  const handleImportRowChange = (
+    rowIndex: number,
+    field: "amount" | "vat" | "total",
+    value: number,
+  ) => {
+    setImportRows((prev) =>
+      prev.map((row) => (row.rowIndex === rowIndex ? { ...row, [field]: value } : row)),
+    );
+  };
+
+  const importTotals = React.useMemo(() => {
+    if (!importRows.length) return null;
+    return importRows.reduce(
+      (acc, row) => {
+        acc.amount += row.amount;
+        acc.vat += row.vat;
+        acc.total += row.total;
+        acc.vatMismatches += row.vatMismatch ? 1 : 0;
+        return acc;
+      },
+      { amount: 0, vat: 0, total: 0, vatMismatches: 0 },
+    );
+  }, [importRows]);
 
   const onEditSubmit = async (values: FormValues) => {
     if (!editExpense) return;
@@ -539,10 +582,18 @@ const Expenses = () => {
                       <div className="font-medium">Итоги файла</div>
                       <div className="mt-2 space-y-1 text-muted-foreground">
                         <div>Строк: {importPreview.totals.rows}</div>
-                        <div>Сумма без НДС: {importPreview.totals.totalAmount.toLocaleString("ru-RU")} RUB</div>
-                        <div>НДС: {importPreview.totals.totalVat.toLocaleString("ru-RU")} RUB</div>
-                        <div>Итого: {importPreview.totals.totalTotal.toLocaleString("ru-RU")} RUB</div>
-                        <div>Проверка НДС: {importPreview.totals.vatMismatches} ошибок</div>
+                        <div>
+                          Сумма без НДС: {(importTotals?.amount ?? importPreview.totals.totalAmount).toLocaleString("ru-RU")} RUB
+                        </div>
+                        <div>
+                          НДС: {(importTotals?.vat ?? importPreview.totals.totalVat).toLocaleString("ru-RU")} RUB
+                        </div>
+                        <div>
+                          Итого: {(importTotals?.total ?? importPreview.totals.totalTotal).toLocaleString("ru-RU")} RUB
+                        </div>
+                        <div>
+                          Проверка НДС: {(importTotals?.vatMismatches ?? importPreview.totals.vatMismatches)} ошибок
+                        </div>
                         <div>Нет договоров: {importPreview.totals.contractsMissing}</div>
                         <div>Нет SIM: {importPreview.totals.simCardsMissing}</div>
                         <div>Нет тарифов: {importPreview.totals.tariffsMissing}</div>
@@ -550,6 +601,84 @@ const Expenses = () => {
                     </div>
                   )}
                 </div>
+
+                {importRows.length ? (
+                  <div className="rounded-lg border border-border bg-muted/10 p-4 text-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium">Распознанные строки</div>
+                      <div className="text-xs text-muted-foreground">Редактируйте суммы при необходимости</div>
+                    </div>
+                    <div className="mt-3 max-h-72 overflow-auto rounded-md border border-border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/40 text-xs text-muted-foreground sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium">№</th>
+                            <th className="px-3 py-2 text-left font-medium">Договор</th>
+                            <th className="px-3 py-2 text-left font-medium">Номер</th>
+                            <th className="px-3 py-2 text-left font-medium">Тариф</th>
+                            <th className="px-3 py-2 text-left font-medium">Период</th>
+                            <th className="px-3 py-2 text-left font-medium">Сумма</th>
+                            <th className="px-3 py-2 text-left font-medium">НДС</th>
+                            <th className="px-3 py-2 text-left font-medium">Итого</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importRows.map((row) => (
+                            <tr key={row.rowIndex} className="border-t border-border">
+                              <td className="px-3 py-2">{row.rowIndex}</td>
+                              <td className="px-3 py-2">{row.contractNumber}</td>
+                              <td className="px-3 py-2">{row.phone || "-"}</td>
+                              <td className="px-3 py-2">{row.tariffName || "-"}</td>
+                              <td className="px-3 py-2">{row.month}</td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={row.amount}
+                                  onChange={(event) =>
+                                    handleImportRowChange(
+                                      row.rowIndex,
+                                      "amount",
+                                      Number(event.target.value) || 0,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={row.vat}
+                                  onChange={(event) =>
+                                    handleImportRowChange(
+                                      row.rowIndex,
+                                      "vat",
+                                      Number(event.target.value) || 0,
+                                    )
+                                  }
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={row.total}
+                                  onChange={(event) =>
+                                    handleImportRowChange(
+                                      row.rowIndex,
+                                      "total",
+                                      Number(event.target.value) || 0,
+                                    )
+                                  }
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="rounded-lg border border-border bg-muted/10 p-4 text-sm">
                   <div className="flex items-center justify-between">
