@@ -167,427 +167,10 @@ function notifyFallbackOnce(key: string, title: string, description: string) {
   toast(title, { description });
 }
 
-function notifyDemoMode() {
-  notifyFallbackOnce("backend-demo", "Демо-режим", "Бэкенд не подключен. Изменения сохраняются только локально.");
-}
-
 function notifyBackendError() {
-  notifyFallbackOnce("backend-offline", "Нет связи с бэкендом", "Изменения сохранены локально и не попадут в Convex.");
+  notifyFallbackOnce("backend-offline", "Нет связи с бэкендом", "Данные недоступны. Проверьте подключение.");
 }
 
-const demoDashboard: DashboardData = {
-  summary: {
-    totalExpenses: 589000,
-    contracts: 24,
-    simCards: 186,
-    employeesWithSim: 142,
-    month: "декабрь 2024",
-  },
-  months: ["декабрь 2024", "ноябрь 2024", "октябрь 2024"],
-  companies: [
-    { id: "1", name: "Холдинг Сфера", contracts: 12, simCards: 95, employees: 78, monthlyExpense: 265000 },
-    { id: "2", name: "Инкасс Коллект", contracts: 8, simCards: 64, employees: 48, monthlyExpense: 148000 },
-    { id: "3", name: "МКК ФК", contracts: 4, simCards: 27, employees: 16, monthlyExpense: 76000 },
-  ],
-  expensesByMonth: [
-    {
-      month: "Июл",
-      companies: [
-        { companyId: "1", company: "Холдинг Сфера", amount: 245000 },
-        { companyId: "2", company: "Инкасс Коллект", amount: 128000 },
-        { companyId: "3", company: "МКК ФК", amount: 67000 },
-      ],
-    },
-    {
-      month: "Авг",
-      companies: [
-        { companyId: "1", company: "Холдинг Сфера", amount: 252000 },
-        { companyId: "2", company: "Инкасс Коллект", amount: 135000 },
-        { companyId: "3", company: "МКК ФК", amount: 72000 },
-      ],
-    },
-    {
-      month: "Сен",
-      companies: [
-        { companyId: "1", company: "Холдинг Сфера", amount: 248000 },
-        { companyId: "2", company: "Инкасс Коллект", amount: 142000 },
-        { companyId: "3", company: "МКК ФК", amount: 69000 },
-      ],
-    },
-    {
-      month: "Окт",
-      companies: [
-        { companyId: "1", company: "Холдинг Сфера", amount: 261000 },
-        { companyId: "2", company: "Инкасс Коллект", amount: 138000 },
-        { companyId: "3", company: "МКК ФК", amount: 74000 },
-      ],
-    },
-    {
-      month: "Ноя",
-      companies: [
-        { companyId: "1", company: "Холдинг Сфера", amount: 258000 },
-        { companyId: "2", company: "Инкасс Коллект", amount: 145000 },
-        { companyId: "3", company: "МКК ФК", amount: 71000 },
-      ],
-    },
-    {
-      month: "Дек",
-      companies: [
-        { companyId: "1", company: "Холдинг Сфера", amount: 265000 },
-        { companyId: "2", company: "Инкасс Коллект", amount: 148000 },
-        { companyId: "3", company: "МКК ФК", amount: 76000 },
-      ],
-    },
-  ],
-  services: [
-    { name: "Мобильная связь", value: 385000 },
-    { name: "Интернет (офис)", value: 124000 },
-    { name: "IP-телефония", value: 52000 },
-    { name: "VPN/каналы", value: 28000 },
-  ],
-  recentContracts: [
-    {
-      id: "1",
-      number: "МТС-2024/001",
-      company: "Холдинг Сфера",
-      operator: "МТС",
-      type: "Мобильная связь",
-      status: "active",
-      monthlyFee: 125000,
-      startDate: "01.01.2024",
-      endDate: "Бессрочный",
-      simCount: 45,
-    },
-    {
-      id: "2",
-      number: "РТК-2024/015",
-      company: "Инкасс Коллект",
-      operator: "Ростелеком",
-      type: "Интернет (офис)",
-      status: "active",
-      monthlyFee: 48000,
-      startDate: "15.03.2024",
-      endDate: "14.03.2025",
-      simCount: 0,
-    },
-    {
-      id: "3",
-      number: "БЛН-2024/008",
-      company: "МКК ФК",
-      operator: "Билайн",
-      type: "Мобильная связь",
-      status: "active",
-      monthlyFee: 32000,
-      startDate: "01.02.2024",
-      endDate: "Бессрочный",
-      simCount: 18,
-    },
-    {
-      id: "4",
-      number: "МГФ-2024/003",
-      company: "Холдинг Сфера",
-      operator: "Мегафон",
-      type: "VPN / канал связи",
-      status: "closing",
-      monthlyFee: 28000,
-      startDate: "01.06.2023",
-      endDate: "31.12.2024",
-      simCount: 0,
-    },
-  ],
-};
-
-const demoEmployees: Employee[] = [
-  {
-    id: "1",
-    name: "Иванов Иван Иванович",
-    company: "Холдинг Сфера",
-    department: "IT-отдел",
-    position: "Системный администратор",
-    status: "active",
-    simCount: 3,
-    maxSim: 20,
-  },
-  {
-    id: "2",
-    name: "Петров Петр Петрович",
-    company: "Холдинг Сфера",
-    department: "Отдел продаж",
-    position: "Менеджер по продажам",
-    status: "active",
-    simCount: 2,
-    maxSim: 20,
-  },
-  {
-    id: "3",
-    name: "Сидорова Анна Сергеевна",
-    company: "Инкасс Коллект",
-    department: "Финансовый отдел",
-    position: "Главный бухгалтер",
-    status: "active",
-    simCount: 1,
-    maxSim: 20,
-  },
-  {
-    id: "4",
-    name: "Козлов Дмитрий Александрович",
-    company: "МКК ФК",
-    department: "Отдел разработки",
-    position: "Ведущий разработчик",
-    status: "active",
-    simCount: 4,
-    maxSim: 20,
-  },
-  {
-    id: "5",
-    name: "Новикова Елена Владимировна",
-    company: "Холдинг Сфера",
-    department: "HR-отдел",
-    position: "HR-менеджер",
-    status: "fired",
-    simCount: 0,
-    maxSim: 20,
-  },
-  {
-    id: "6",
-    name: "Морозов Алексей Николаевич",
-    company: "Инкасс Коллект",
-    department: "Инкассация",
-    position: "Старший инкассатор",
-    status: "active",
-    simCount: 5,
-    maxSim: 20,
-  },
-];
-
-const demoContracts: Contract[] = demoDashboard.recentContracts.map((c) => ({
-  id: c.id,
-  number: c.number,
-  companyId: "demo-company",
-  company: c.company,
-  operatorId: "demo-operator",
-  operator: c.operator,
-  type: c.type,
-  status: c.status,
-  startDate: c.startDate ?? "",
-  endDate: c.endDate ?? "Бессрочный",
-  monthlyFee: c.monthlyFee,
-  simCount: c.simCount ?? 0,
-}));
-
-const demoOperators: Operator[] = [
-  {
-    id: "1",
-    name: "МТС",
-    type: "Мобильная связь",
-    contracts: 5,
-    simCards: 78,
-    manager: "Петрова Анна",
-    phone: "+7 (495) 123-00-00",
-    email: "corp@mts.ru",
-  },
-  {
-    id: "2",
-    name: "Билайн",
-    type: "Мобильная связь",
-    contracts: 3,
-    simCards: 42,
-    manager: "Сидоров Игорь",
-    phone: "+7 (495) 234-00-00",
-    email: "business@beeline.ru",
-  },
-  {
-    id: "3",
-    name: "Мегафон",
-    type: "Мобильная связь",
-    contracts: 2,
-    simCards: 25,
-    manager: "Козлова Мария",
-    phone: "+7 (495) 345-00-00",
-    email: "corp@megafon.ru",
-  },
-  {
-    id: "4",
-    name: "Ростелеком",
-    type: "Интернет / IP-телефония",
-    contracts: 6,
-    simCards: 0,
-    manager: "Иванова Елена",
-    phone: "+7 (495) 567-00-00",
-    email: "corporate@rt.ru",
-  },
-];
-
-const demoCompanies: Company[] = [
-  {
-    id: "1",
-    name: "Холдинг Сфера",
-    inn: "7701234567",
-    kpp: "770101001",
-    comment: "Головная компания холдинга",
-    contracts: 12,
-    simCards: 95,
-    employees: 78,
-    monthlyExpense: 265000,
-  },
-  {
-    id: "2",
-    name: "Инкасс Коллект",
-    inn: "7702345678",
-    kpp: "770201001",
-    comment: "Инкассаторские услуги",
-    contracts: 8,
-    simCards: 64,
-    employees: 48,
-    monthlyExpense: 148000,
-  },
-  {
-    id: "3",
-    name: "МКК ФК",
-    inn: "7703456789",
-    kpp: "770301001",
-    comment: "Микрофинансовая компания",
-    contracts: 4,
-    simCards: 27,
-    employees: 16,
-    monthlyExpense: 76000,
-  },
-];
-
-const demoTariffs: Tariff[] = [
-  {
-    id: "1",
-    name: "Корпоративный Безлимит",
-    operatorId: "demo-operator-1",
-    operator: "МТС",
-    type: "Мобильная связь",
-    monthlyFee: 1500,
-    dataLimitGb: null,
-    minutes: 9999,
-    sms: 100,
-    status: "active",
-    simCount: 45,
-  },
-  {
-    id: "2",
-    name: "Интернет 30 ГБ",
-    operatorId: "demo-operator-1",
-    operator: "МТС",
-    type: "Мобильный интернет",
-    monthlyFee: 800,
-    dataLimitGb: 30,
-    minutes: null,
-    sms: null,
-    status: "active",
-    simCount: 28,
-  },
-  {
-    id: "3",
-    name: "Бизнес 500",
-    operatorId: "demo-operator-2",
-    operator: "Билайн",
-    type: "Мобильная связь",
-    monthlyFee: 990,
-    dataLimitGb: 15,
-    minutes: 500,
-    sms: 50,
-    status: "active",
-    simCount: 35,
-  },
-];
-
-const demoExpenses: Expense[] = [
-  {
-    id: "1",
-    companyId: "demo-company-1",
-    company: "Холдинг Сфера",
-    contract: "МТС-2024/001",
-    operator: "МТС",
-    month: "Ноябрь 2024",
-    type: "Мобильная связь",
-    amount: 125340,
-    vat: 20890,
-    total: 146230,
-    status: "confirmed",
-    hasDocument: true,
-  },
-  {
-    id: "2",
-    companyId: "demo-company-2",
-    company: "Инкасс Коллект",
-    contract: "РТК-2024/015",
-    operator: "Ростелеком",
-    month: "Ноябрь 2024",
-    type: "Интернет (офис)",
-    amount: 48000,
-    vat: 8000,
-    total: 56000,
-    status: "confirmed",
-    hasDocument: true,
-  },
-  {
-    id: "3",
-    companyId: "demo-company-3",
-    company: "МКК ФК",
-    contract: "БЛН-2024/008",
-    operator: "Билайн",
-    month: "Ноябрь 2024",
-    type: "Мобильная связь",
-    amount: 32450,
-    vat: 5408,
-    total: 37858,
-    status: "draft",
-    hasDocument: false,
-  },
-];
-
-const demoSimCards: SimCard[] = [
-  {
-    id: "1",
-    number: "+7 (495) 123-45-67",
-    iccid: "8970119900001234567",
-    type: "Голосовая",
-    status: "active",
-    operatorId: "demo-operator-1",
-    operator: "МТС",
-    companyId: "demo-company-1",
-    company: "Холдинг Сфера",
-    employeeId: "1",
-    employee: "Иванов И.И.",
-    tariffId: "1",
-    tariff: "Корпоративный Безлимит",
-    limit: 5000,
-  },
-  {
-    id: "2",
-    number: "+7 (495) 234-56-78",
-    iccid: "8970119900002345678",
-    type: "Интернет",
-    status: "active",
-    operatorId: "demo-operator-1",
-    operator: "МТС",
-    companyId: "demo-company-1",
-    company: "Холдинг Сфера",
-    employeeId: "2",
-    employee: "Петров П.П.",
-    tariffId: "2",
-    tariff: "Интернет 30 ГБ",
-    limit: 3000,
-  },
-  {
-    id: "3",
-    number: "+7 (495) 345-67-89",
-    iccid: "8970119900003456789",
-    type: "Голосовая",
-    status: "blocked",
-    operatorId: "demo-operator-3",
-    operator: "Мегафон",
-    companyId: "demo-company-1",
-    company: "Холдинг Сфера",
-    employee: "Сидоров С.С.",
-    limit: 4000,
-  },
-];
 
 const emptyDashboard: DashboardData = {
   summary: {
@@ -606,7 +189,7 @@ const emptyDashboard: DashboardData = {
 };
 
 export function useDashboardData(): DashboardData {
-  const [data, setData] = useState<DashboardData>(backendAvailable ? emptyDashboard : demoDashboard);
+  const [data, setData] = useState<DashboardData>(emptyDashboard);
 
   useEffect(() => {
     if (!convexClient) {
@@ -633,6 +216,7 @@ export function useDashboardData(): DashboardData {
         }
       } catch (error) {
         console.error("Failed to load dashboard data", error);
+        setData(emptyDashboard);
       }
     };
 
@@ -662,7 +246,7 @@ export function useDashboardData(): DashboardData {
 }
 
 export function useEmployees(): Employee[] {
-  const [data, setData] = useState<Employee[]>(demoEmployees);
+  const [data, setData] = useState<Employee[]>([]);
 
   useEffect(() => {
     if (!convexClient) {
@@ -679,7 +263,7 @@ export function useEmployees(): Employee[] {
         }
       })
       .catch(() => {
-        setData(demoEmployees);
+        setData([]);
       });
 
     return () => {
@@ -691,7 +275,7 @@ export function useEmployees(): Employee[] {
 }
 // Extended hook with creation and company IDs
 export function useEmployeesWithMutations() {
-  const [data, setData] = useState<Employee[]>(demoEmployees);
+  const [data, setData] = useState<Employee[]>([]);
 
   useEffect(() => {
     if (!convexClient) {
@@ -708,7 +292,7 @@ export function useEmployeesWithMutations() {
         }
       })
       .catch(() => {
-        setData((prev) => prev);
+        setData([]);
       });
 
     return () => {
@@ -717,17 +301,8 @@ export function useEmployeesWithMutations() {
   }, []);
 
   const createEmployee = async (payload: Omit<Employee, "id" | "company"> & { company: string }) => {
-    const addLocal = () => {
-      const newItem: Employee = {
-        ...payload,
-        id: crypto.randomUUID(),
-      };
-      setData((prev) => [newItem, ...prev]);
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      addLocal();
+      notifyBackendError();
       return;
     }
 
@@ -744,20 +319,14 @@ export function useEmployeesWithMutations() {
       const res = await convexClient.query("employees:list", {});
       setData(res as Employee[]);
     } catch (err) {
-      console.warn("employees:create fallback to local demo data", err);
+      console.warn("employees:create failed", err);
       notifyBackendError();
-      addLocal();
     }
   };
 
   const updateEmployee = async (payload: Employee) => {
-    const addLocal = () => {
-      setData((prev) => prev.map((e) => (e.id === payload.id ? payload : e)));
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      addLocal();
+      notifyBackendError();
       return;
     }
 
@@ -775,17 +344,14 @@ export function useEmployeesWithMutations() {
       const res = await convexClient.query("employees:list", {});
       setData(res as Employee[]);
     } catch (err) {
-      console.warn("employees:update fallback to local demo data", err);
+      console.warn("employees:update failed", err);
       notifyBackendError();
-      addLocal();
     }
   };
 
   const deleteEmployee = async (id: string) => {
-    const removeLocal = () => setData((prev) => prev.filter((e) => e.id !== id));
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      removeLocal();
+      notifyBackendError();
       return;
     }
     try {
@@ -793,9 +359,8 @@ export function useEmployeesWithMutations() {
       const res = await convexClient.query("employees:list", {});
       setData(res as Employee[]);
     } catch (err) {
-      console.warn("employees:remove fallback to local demo data", err);
+      console.warn("employees:remove failed", err);
       notifyBackendError();
-      removeLocal();
     }
   };
 
@@ -808,18 +373,9 @@ export function useContracts() {
     companies: ContractOption[];
     operators: ContractOption[];
   }>({
-    items: demoContracts,
-    companies: [
-      { id: "demo-company-1", name: "Холдинг Сфера" },
-      { id: "demo-company-2", name: "Инкасс Коллект" },
-      { id: "demo-company-3", name: "МКК ФК" },
-    ],
-    operators: [
-      { id: "demo-operator-1", name: "МТС" },
-      { id: "demo-operator-2", name: "Билайн" },
-      { id: "demo-operator-3", name: "Мегафон" },
-      { id: "demo-operator-4", name: "Ростелеком" },
-    ],
+    items: [],
+    companies: [],
+    operators: [],
   });
 
   useEffect(() => {
@@ -835,7 +391,7 @@ export function useContracts() {
         }
       })
       .catch(() => {
-        setData((prev) => prev);
+        setData({ items: [], companies: [], operators: [] });
       });
 
     return () => {
@@ -844,21 +400,8 @@ export function useContracts() {
   }, []);
 
   const createContract = async (payload: Omit<Contract, "id" | "company" | "operator">) => {
-    const fallbackAdd = () => {
-      const companyName = data.companies.find((c) => c.id === payload.companyId)?.name ?? "Компания";
-      const operatorName = data.operators.find((o) => o.id === payload.operatorId)?.name ?? "Оператор";
-      const newItem: Contract = {
-        ...payload,
-        company: companyName,
-        operator: operatorName,
-        id: crypto.randomUUID(),
-      };
-      setData((prev) => ({ ...prev, items: [newItem, ...prev.items] }));
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      fallbackAdd();
+      notifyBackendError();
       return;
     }
 
@@ -878,24 +421,14 @@ export function useContracts() {
       const res = await convexClient.query("contracts:list", {});
       setData(res as typeof data);
     } catch (err) {
-      // Если Convex недоступен или ошибка валидации (например, демо-ID), падаем в демо-режим
-      console.warn("contracts:create fallback to local demo data", err);
+      console.warn("contracts:create failed", err);
       notifyBackendError();
-      fallbackAdd();
     }
   };
 
   const updateContract = async (payload: Contract) => {
-    const addLocal = () => {
-      setData((prev) => ({
-        ...prev,
-        items: prev.items.map((c) => (c.id === payload.id ? payload : c)),
-      }));
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      addLocal();
+      notifyBackendError();
       return;
     }
 
@@ -916,20 +449,14 @@ export function useContracts() {
       const res = await convexClient.query("contracts:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("contracts:update fallback to local demo data", err);
+      console.warn("contracts:update failed", err);
       notifyBackendError();
-      addLocal();
     }
   };
 
   const deleteContract = async (id: string) => {
-    const removeLocal = () => {
-      setData((prev) => ({ ...prev, items: prev.items.filter((c) => c.id !== id) }));
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      removeLocal();
+      notifyBackendError();
       return;
     }
 
@@ -940,9 +467,8 @@ export function useContracts() {
       const res = await convexClient.query("contracts:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("contracts:remove fallback to local demo data", err);
+      console.warn("contracts:remove failed", err);
       notifyBackendError();
-      removeLocal();
     }
   };
 
@@ -950,7 +476,7 @@ export function useContracts() {
 }
 
 export function useOperators() {
-  const [items, setItems] = useState<Operator[]>(demoOperators);
+  const [items, setItems] = useState<Operator[]>([]);
 
   useEffect(() => {
     if (!convexClient) {
@@ -965,7 +491,7 @@ export function useOperators() {
         }
       })
       .catch(() => {
-        setItems((prev) => prev);
+        setItems([]);
       });
     return () => {
       cancelled = true;
@@ -973,14 +499,8 @@ export function useOperators() {
   }, []);
 
   const createOperator = async (payload: Omit<Operator, "id" | "contracts" | "simCards">) => {
-    const addLocal = () => {
-      const newItem: Operator = { ...payload, id: crypto.randomUUID(), contracts: 0, simCards: 0 };
-      setItems((prev) => [newItem, ...prev]);
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      addLocal();
+      notifyBackendError();
       return;
     }
 
@@ -995,17 +515,14 @@ export function useOperators() {
       const res = await convexClient.query("operators:list", {});
       setItems(res as Operator[]);
     } catch (err) {
-      console.warn("operators:create fallback to local demo data", err);
+      console.warn("operators:create failed", err);
       notifyBackendError();
-      addLocal();
     }
   };
 
   const deleteOperator = async (id: string) => {
-    const removeLocal = () => setItems((prev) => prev.filter((o) => o.id !== id));
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      removeLocal();
+      notifyBackendError();
       return;
     }
     try {
@@ -1013,9 +530,8 @@ export function useOperators() {
       const res = await convexClient.query("operators:list", {});
       setItems(res as Operator[]);
     } catch (err) {
-      console.warn("operators:remove fallback to local demo data", err);
+      console.warn("operators:remove failed", err);
       notifyBackendError();
-      removeLocal();
     }
   };
 
@@ -1023,7 +539,7 @@ export function useOperators() {
 }
 
 export function useCompanies() {
-  const [items, setItems] = useState<Company[]>(demoCompanies);
+  const [items, setItems] = useState<Company[]>([]);
 
   useEffect(() => {
     if (!convexClient) {
@@ -1038,7 +554,7 @@ export function useCompanies() {
         }
       })
       .catch(() => {
-        setItems((prev) => prev);
+        setItems([]);
       });
     return () => {
       cancelled = true;
@@ -1046,21 +562,8 @@ export function useCompanies() {
   }, []);
 
   const createCompany = async (payload: Omit<Company, "id" | "contracts" | "simCards" | "employees" | "monthlyExpense">) => {
-    const addLocal = () => {
-      const newItem: Company = {
-        ...payload,
-        id: crypto.randomUUID(),
-        contracts: 0,
-        simCards: 0,
-        employees: 0,
-        monthlyExpense: 0,
-      };
-      setItems((prev) => [newItem, ...prev]);
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      addLocal();
+      notifyBackendError();
       return;
     }
 
@@ -1074,17 +577,14 @@ export function useCompanies() {
       const res = await convexClient.query("companies:list", {});
       setItems(res as Company[]);
     } catch (err) {
-      console.warn("companies:create fallback to local demo data", err);
+      console.warn("companies:create failed", err);
       notifyBackendError();
-      addLocal();
     }
   };
 
   const deleteCompany = async (id: string) => {
-    const removeLocal = () => setItems((prev) => prev.filter((c) => c.id !== id));
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      removeLocal();
+      notifyBackendError();
       return;
     }
     try {
@@ -1092,9 +592,8 @@ export function useCompanies() {
       const res = await convexClient.query("companies:list", {});
       setItems(res as Company[]);
     } catch (err) {
-      console.warn("companies:remove fallback to local demo data", err);
+      console.warn("companies:remove failed", err);
       notifyBackendError();
-      removeLocal();
     }
   };
 
@@ -1106,8 +605,8 @@ export function useTariffs() {
     items: Tariff[];
     operators: ContractOption[];
   }>({
-    items: demoTariffs,
-    operators: demoOperators.map((o) => ({ id: o.id, name: o.name })),
+    items: [],
+    operators: [],
   });
 
   useEffect(() => {
@@ -1123,7 +622,7 @@ export function useTariffs() {
         }
       })
       .catch(() => {
-        setData((prev) => prev);
+        setData({ items: [], operators: [] });
       });
     return () => {
       cancelled = true;
@@ -1131,15 +630,8 @@ export function useTariffs() {
   }, []);
 
   const createTariff = async (payload: Omit<Tariff, "id" | "operator">) => {
-    const addLocal = () => {
-      const operatorName = data.operators.find((o) => o.id === payload.operatorId)?.name ?? "Оператор";
-      const newItem: Tariff = { ...payload, id: crypto.randomUUID(), operator: operatorName };
-      setData((prev) => ({ ...prev, items: [newItem, ...prev.items] }));
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      addLocal();
+      notifyBackendError();
       return;
     }
 
@@ -1156,22 +648,14 @@ export function useTariffs() {
       const res = await convexClient.query("tariffs:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("tariffs:create fallback to local demo data", err);
+      console.warn("tariffs:create failed", err);
       notifyBackendError();
-      addLocal();
     }
   };
 
   const updateTariff = async (payload: Tariff) => {
-    const updateLocal = () =>
-      setData((prev) => ({
-        ...prev,
-        items: prev.items.map((t) => (t.id === payload.id ? payload : t)),
-      }));
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      updateLocal();
+      notifyBackendError();
       return;
     }
 
@@ -1189,17 +673,14 @@ export function useTariffs() {
       const res = await convexClient.query("tariffs:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("tariffs:update fallback to local demo data", err);
+      console.warn("tariffs:update failed", err);
       notifyBackendError();
-      updateLocal();
     }
   };
 
   const deleteTariff = async (id: string) => {
-    const removeLocal = () => setData((prev) => ({ ...prev, items: prev.items.filter((t) => t.id !== id) }));
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      removeLocal();
+      notifyBackendError();
       return;
     }
     try {
@@ -1207,9 +688,8 @@ export function useTariffs() {
       const res = await convexClient.query("tariffs:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("tariffs:remove fallback to local demo data", err);
+      console.warn("tariffs:remove failed", err);
       notifyBackendError();
-      removeLocal();
     }
   };
 
@@ -1218,13 +698,13 @@ export function useTariffs() {
 
 export function useExpenses() {
   const [data, setData] = useState<{ items: Expense[]; companies: ContractOption[]; summary: { total: number; confirmed: number; draft: number; noDocs: number } }>({
-    items: demoExpenses,
-    companies: demoCompanies.map((c) => ({ id: c.id, name: c.name })),
+    items: [],
+    companies: [],
     summary: {
-      total: demoExpenses.reduce((s, e) => s + e.total, 0),
-      confirmed: demoExpenses.filter((e) => e.status === "confirmed").reduce((s, e) => s + e.total, 0),
-      draft: demoExpenses.filter((e) => e.status === "draft").reduce((s, e) => s + e.total, 0),
-      noDocs: demoExpenses.filter((e) => !e.hasDocument).length,
+      total: 0,
+      confirmed: 0,
+      draft: 0,
+      noDocs: 0,
     },
   });
 
@@ -1237,7 +717,11 @@ export function useExpenses() {
         if (!cancelled && res) setData(res as typeof data);
       })
       .catch(() => {
-        setData((prev) => prev);
+        setData({
+          items: [],
+          companies: [],
+          summary: { total: 0, confirmed: 0, draft: 0, noDocs: 0 },
+        });
       });
     return () => {
       cancelled = true;
@@ -1256,25 +740,8 @@ export function useExpenses() {
   };
 
   const createExpense = async (payload: Omit<Expense, "id" | "company" | "total"> & { total?: number }) => {
-    const addLocal = () => {
-      const companyName = data.companies.find((c) => c.id === payload.companyId)?.name ?? "Компания";
-      const total = payload.total ?? payload.amount + payload.vat;
-      const newItem: Expense = { ...payload, company: companyName, id: crypto.randomUUID(), total };
-      setData((prev) => {
-        const items = [newItem, ...prev.items];
-        const summary = {
-          total: items.reduce((s, e) => s + e.total, 0),
-          confirmed: items.filter((e) => e.status === "confirmed").reduce((s, e) => s + e.total, 0),
-          draft: items.filter((e) => e.status === "draft").reduce((s, e) => s + e.total, 0),
-          noDocs: items.filter((e) => !e.hasDocument).length,
-        };
-        return { ...prev, items, summary };
-      });
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      addLocal();
+      notifyBackendError();
       return;
     }
 
@@ -1295,29 +762,14 @@ export function useExpenses() {
       const res = await convexClient.query("expenses:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("expenses:create fallback to local demo data", err);
+      console.warn("expenses:create failed", err);
       notifyBackendError();
-      addLocal();
     }
   };
 
   const updateExpense = async (payload: Expense) => {
-    const addLocal = () => {
-      setData((prev) => {
-        const items = prev.items.map((e) => (e.id === payload.id ? payload : e));
-        const summary = {
-          total: items.reduce((s, e) => s + e.total, 0),
-          confirmed: items.filter((e) => e.status === "confirmed").reduce((s, e) => s + e.total, 0),
-          draft: items.filter((e) => e.status === "draft").reduce((s, e) => s + e.total, 0),
-          noDocs: items.filter((e) => !e.hasDocument).length,
-        };
-        return { ...prev, items, summary };
-      });
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      addLocal();
+      notifyBackendError();
       return;
     }
 
@@ -1339,29 +791,14 @@ export function useExpenses() {
       const res = await convexClient.query("expenses:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("expenses:update fallback to local demo data", err);
+      console.warn("expenses:update failed", err);
       notifyBackendError();
-      addLocal();
     }
   };
 
   const deleteExpense = async (id: string) => {
-    const removeLocal = () => {
-      setData((prev) => {
-        const items = prev.items.filter((e) => e.id !== id);
-        const summary = {
-          total: items.reduce((s, e) => s + e.total, 0),
-          confirmed: items.filter((e) => e.status === "confirmed").reduce((s, e) => s + e.total, 0),
-          draft: items.filter((e) => e.status === "draft").reduce((s, e) => s + e.total, 0),
-          noDocs: items.filter((e) => !e.hasDocument).length,
-        };
-        return { ...prev, items, summary };
-      });
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      removeLocal();
+      notifyBackendError();
       return;
     }
 
@@ -1370,9 +807,8 @@ export function useExpenses() {
       const res = await convexClient.query("expenses:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("expenses:remove fallback to local demo data", err);
+      console.warn("expenses:remove failed", err);
       notifyBackendError();
-      removeLocal();
     }
   };
 
@@ -1387,11 +823,11 @@ export function useSimCards() {
     employees: ContractOption[];
     tariffs: ContractOption[];
   }>({
-    items: demoSimCards,
-    companies: demoCompanies.map((c) => ({ id: c.id, name: c.name })),
-    operators: demoOperators.map((o) => ({ id: o.id, name: o.name })),
-    employees: demoEmployees.map((e) => ({ id: e.id, name: e.name })),
-    tariffs: demoTariffs.map((t) => ({ id: t.id, name: t.name })),
+    items: [],
+    companies: [],
+    operators: [],
+    employees: [],
+    tariffs: [],
   });
 
   useEffect(() => {
@@ -1403,7 +839,13 @@ export function useSimCards() {
         if (!cancelled && res) setData(res as typeof data);
       })
       .catch(() => {
-        setData((prev) => prev);
+        setData({
+          items: [],
+          companies: [],
+          operators: [],
+          employees: [],
+          tariffs: [],
+        });
       });
     return () => {
       cancelled = true;
@@ -1411,20 +853,8 @@ export function useSimCards() {
   }, []);
 
   const createSimCard = async (payload: Omit<SimCard, "id" | "company" | "operator" | "employee" | "tariff">) => {
-    const addLocal = () => {
-      const company = data.companies.find((c) => c.id === payload.companyId)?.name ?? "Компания";
-      const operator = data.operators.find((o) => o.id === payload.operatorId)?.name ?? "Оператор";
-      const employee = payload.employeeId
-        ? data.employees.find((e) => e.id === payload.employeeId)?.name ?? ""
-        : "";
-      const tariff = payload.tariffId ? data.tariffs.find((t) => t.id === payload.tariffId)?.name ?? "" : "";
-      const newItem: SimCard = { ...payload, company, operator, employee, tariff, id: crypto.randomUUID() };
-      setData((prev) => ({ ...prev, items: [newItem, ...prev.items] }));
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      addLocal();
+      notifyBackendError();
       return;
     }
 
@@ -1443,23 +873,14 @@ export function useSimCards() {
       const res = await convexClient.query("simCards:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("simCards:create fallback to local demo data", err);
+      console.warn("simCards:create failed", err);
       notifyBackendError();
-      addLocal();
     }
   };
 
   const updateSimCard = async (payload: SimCard) => {
-    const addLocal = () => {
-      setData((prev) => ({
-        ...prev,
-        items: prev.items.map((s) => (s.id === payload.id ? payload : s)),
-      }));
-    };
-
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      addLocal();
+      notifyBackendError();
       return;
     }
 
@@ -1479,17 +900,14 @@ export function useSimCards() {
       const res = await convexClient.query("simCards:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("simCards:update fallback to local demo data", err);
+      console.warn("simCards:update failed", err);
       notifyBackendError();
-      addLocal();
     }
   };
 
   const deleteSimCard = async (id: string) => {
-    const removeLocal = () => setData((prev) => ({ ...prev, items: prev.items.filter((s) => s.id !== id) }));
     if (!convexClient || !backendAvailable) {
-      notifyDemoMode();
-      removeLocal();
+      notifyBackendError();
       return;
     }
     try {
@@ -1497,9 +915,8 @@ export function useSimCards() {
       const res = await convexClient.query("simCards:list", {});
       setData(res as typeof data);
     } catch (err) {
-      console.warn("simCards:remove fallback to local demo data", err);
+      console.warn("simCards:remove failed", err);
       notifyBackendError();
-      removeLocal();
     }
   };
 
