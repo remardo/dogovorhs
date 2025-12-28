@@ -88,6 +88,8 @@ const MainLayout = ({ children, title, subtitle, actions }: MainLayoutProps) => 
                 side="bottom"
                 sideOffset={8}
                 className="w-[min(520px,90vw)] p-2"
+                onOpenAutoFocus={(event) => event.preventDefault()}
+                onCloseAutoFocus={(event) => event.preventDefault()}
               >
                 {allResults.length === 0 ? (
                   <div className="px-3 py-4 text-sm text-muted-foreground">
