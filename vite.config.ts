@@ -19,5 +19,16 @@ export default defineConfig(({ mode }) => ({
     globals: true,
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "lcov"],
+      reportsDirectory: "coverage",
+      include: ["src/**/*.{ts,tsx}", "convex/**/*.ts"],
+      exclude: [
+        "src/vite-env.d.ts",
+        "**/*.test.*",
+        "**/__tests__/**"
+      ]
+    }
   },
 }));

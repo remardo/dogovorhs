@@ -4,21 +4,23 @@
 
 **URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
 
+Note: Replace REPLACE_WITH_PROJECT_ID with your actual project ID.
+
 ## How can I edit this code?
 
 There are several ways of editing your application.
 
-**Use Lovable**
+### Use Lovable
 
 Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
 
 Changes made via Lovable will be committed automatically to this repo.
 
-**Use your preferred IDE**
+### Use your preferred IDE
 
 If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+The only requirement is having Node.js & npm installed — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
 Follow these steps:
 
@@ -36,13 +38,15 @@ npm i
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+By default, the Vite dev server runs at http://localhost:8080 (configurable in [vite.config.ts](./vite.config.ts)). You can change the port with `--port`.
+
+### Edit a file directly in GitHub
 
 - Navigate to the desired file(s).
 - Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- Make your edits and commit them.
 
-**Use GitHub Codespaces**
+### Use GitHub Codespaces
 
 - Navigate to the main page of your repository.
 - Click on the "Code" button (green button) near the top right.
@@ -60,9 +64,23 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Testing
+
+Run tests and view coverage using Vitest:
+
+```sh
+# Run unit tests
+npm test
+
+# Run tests with coverage (text, HTML, lcov)
+npm test -- --coverage
+```
+
+After running coverage, open the HTML report at `coverage/index.html`.
+
 ## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share → Publish.
 
 ## Can I connect a custom domain to my Lovable project?
 
@@ -78,8 +96,8 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/c
 
 1. Установите переменную окружения `VITE_CONVEX_URL` (из вашего Convex проекта).
 2. Запустите Convex локально: `npm run convex:dev` (требуется вход в Convex CLI).
-3. Однократно прогоните сидирование: `npx convex run seed:run`.
-4. Стартуйте фронтенд: `npm run dev -- --host --port 5173`.
+3. Однократно запустите сидирование данных: `npx convex run seed:run`.
+4. Стартуйте фронтенд: `npm run dev` (по умолчанию на http://localhost:8080).
 
 Если `VITE_CONVEX_URL` не задан, фронтенд покажет демо-данные, но будет готов переключиться на Convex при появлении URL.
 
@@ -87,8 +105,8 @@ Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/c
 
 В проект добавлены заготовки для включения авторизации в Convex:
 
-- клиентские методы `initBackendAuthFromStorage` и `setBackendAuthToken` в `src/lib/backend/client.ts`;
-- серверный helper `requireUserIdentity` в `convex/_lib/auth.ts` (можно подключать в queries/mutations, когда появится провайдер auth).
+- клиентские методы `initBackendAuthFromStorage` и `setBackendAuthToken` в [src/lib/backend/client.ts](./src/lib/backend/client.ts);
+- серверный helper `requireUserIdentity` в [convex/_lib/auth.ts](./convex/_lib/auth.ts) (можно подключать в queries/mutations, когда появится провайдер auth).
 
 #### Принудительная авторизация (опционально)
 

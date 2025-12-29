@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SimCard } from "@/lib/backend";
-import { filterSimCards } from "@/lib/simCardsUtils";
+import { filterSimCards, pickFirstOrNone } from "@/lib/simCardsUtils";
 
 describe("filterSimCards", () => {
   const base: SimCard[] = [
@@ -86,3 +86,21 @@ describe("filterSimCards", () => {
     expect(result).toHaveLength(0);
   });
 });
+
+	describe("pickFirstOrNone", () => {
+	  it("returns the id of the first item when present", () => {
+	    const items = [{ id: "a" }, { id: "b" }];
+	    expect(pickFirstOrNone(items, "none")).toBe("a");
+	  });
+	
+	  it("returns the none value when array is empty", () => {
+	    expect(pickFirstOrNone([], "none")).toBe("none");
+	  });
+	
+	  it("works for arrays of objects with id field", () => {
+	    type Item = { id: string; name: string };
+	    const items: Item[] = [{ id: "x", name: "X" }];
+	    expect(pickFirstOrNone(items, "none")).toBe("x");
+	  });
+	});
+
