@@ -106,6 +106,40 @@ describe("parseInvoiceText", () => {
   });
 });
 
+describe("periods", () => {
+  it("takes explicit date range, not invoice month", () => {
+    const r = parseInvoiceText(
+      [
+        "Счет на оплату № 5986 от 14 сентября 2026 г.",
+        "Основание: 508/ю от 29.04.16",
+        "Услуга Доступ в Интернет по адресу за период с 01.10.2026",
+        "по 31.10.2026 по договору 508/ю от 29.04.16",
+        "Итого: 2 440,00",
+        "В том числе НДС 7%: 159,63",
+        "Всего к оплате: 2 440,00",
+      ].join("\n"),
+    );
+    expect(r.periodStart).toBe("01.10.2026");
+    expect(r.periodEnd).toBe("31.10.2026");
+    expect(r.total).toBe(2440);
+  });
+
+  it("uses uniform service period for advance bills", () => {
+    const r = parseInvoiceText(
+      [
+        "Счёт № 210000003223840/1-81 от 31.08.2026",
+        "Договор № 100210005617997 от 06.11.2020",
+        'Общество с ограниченной ответственностью "ТЕХНО ПЛЮС"',
+        "Интернет Скорость, абонентская плата, c 01.10.2026 по 31.10.2026 3 015,99",
+        "3 015,99Общая сумма к оплате(рубль): 543,87",
+      ].join("\n"),
+    );
+    expect(r.periodStart).toBe("01.10.2026");
+    expect(r.periodEnd).toBe("31.10.2026");
+    expect(r.notes.join(" ")).toContain("аванс");
+  });
+});
+
 describe("helpers", () => {
   it("normalizes contract numbers for matching", () => {
     expect(normalizeContractNumber("4101- СВ")).toBe("4101СВ");

@@ -52,7 +52,8 @@ const OPERATOR_MARKERS: { name: string; markers: string[] }[] = [
 
 const NUM = "[\\d\\s\u00a0]+[.,]\\d{2,4}";
 const NOSIGN = String.raw`(?:N9|№|¹|N)`;
-const DMY = String.raw`(\d{2})[.\s](\d{2})[.\s](\d{2,4})`;
+// Одна группа = целая дата (во избежание путаницы индексов при двух датах в строке)
+const DMY = String.raw`(\d{2}[.\s]\d{2}[.\s]\d{2,4})`;
 
 function cyrRatio(text: string): number {
   const cyr = (text.match(/[Ѐ-џ]/g) ?? []).length;
@@ -164,8 +165,10 @@ function parseRuDateDmy(raw: string): string {
 function parseDmy(raw: string): string {
   const m = raw.trim().match(new RegExp(DMY));
   if (!m) return "";
-  const year = m[3].length === 4 ? Number(m[3]) : 2000 + Number(m[3]);
-  return `${Number(m[1]).toString().padStart(2, "0")}.${String(Number(m[2])).padStart(2, "0")}.${year}`;
+  const parts = m[1].split(/[.\s]+/).filter(Boolean);
+  if (parts.length !== 3) return "";
+  const year = parts[2].length === 4 ? Number(parts[2]) : 2000 + Number(parts[2]);
+  return `${Number(parts[0]).toString().padStart(2, "0")}.${String(Number(parts[1])).padStart(2, "0")}.${year}`;
 }
 
 function parseDmyIso(raw: string): string {
@@ -282,6 +285,23 @@ export function parseInvoiceText(rawText: string): ParsedInvoice {
         res.periodEnd = `${lastDay(y, m1)}.${String(m1).padStart(2, "0")}.${y}`;
         notes.push("период — квартал из счёта (аванс)");
       }
+    }
+  }
+  if (!res.periodStart) {
+    // Авансовые счета без расчётного периода: единый период услуг в позициях
+    // (напр. ЭР-Телеком: счёт от августа за октябрь). При смешанных — месяц счёта.
+    const svc: [string, string][] = [];
+    // "c" бывает латинской (документы ЭР-Телеком)
+    const re = new RegExp(`[cс]\\s*${DMY}\\s*по\\s*${DMY}`, "gi");
+    let sm: RegExpExecArray | null;
+    while ((sm = re.exec(text)) !== null) {
+      svc.push([parseDmy(sm[1]), parseDmy(sm[2])]);
+    }
+    const uniq = [...new Set(svc.map(([a, b]) => `${a}|${b}`))];
+    if (svc.length > 0 && uniq.length === 1 && svc[0][0] && svc[0][1]) {
+      res.periodStart = svc[0][0];
+      res.periodEnd = svc[0][1];
+      notes.push("период услуг из позиций счёта (аванс)");
     }
   }
   if (!res.periodStart && res.invoiceDate) {
