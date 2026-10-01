@@ -24,7 +24,15 @@ export async function applyVerifiedCore(ctx: MutationCtx, d: Infer<typeof verifi
   if(d.expectedContractStartDate !== undefined && contract.startDate !== d.expectedContractStartDate && contract.startDate !== d.contractStartDate) throw new Error("Дата договора изменена после сверки");
   if(d.parentInvoiceId && (parent.periodStart!==d.periodStart || parent.periodEnd!==d.periodEnd)) throw new Error("Период детализации не совпадает с начислением");
   if (charge.total !== parent.total && charge.total !== d.serviceTotal) throw new Error("Начисление изменено после сверки");
-  if (d.serviceTotal !== parent.total && d.vatRate === undefined) throw new Error("Не указана подтверждённая ставка НДС");
+  const explicitTax=d.serviceAmount!==undefined && d.serviceVat!==undefined;
+  if ((d.serviceAmount!==undefined || d.serviceVat!==undefined) && (!explicitTax || !Number.isFinite(d.serviceAmount) || !Number.isFinite(d.serviceVat) || d.serviceAmount!<0 || d.serviceVat!<0 || roundMoney(d.serviceAmount!+d.serviceVat!)!==d.serviceTotal)) throw new Error("Не сходятся подтверждённые суммы услуг и НДС");
+  if (d.serviceTotal !== parent.total && d.vatRate === undefined && !explicitTax) throw new Error("Не указаны подтверждённые суммы или ставка НДС");
+  for(const r of d.rows){
+    if(r.periodStart || r.periodEnd){
+      validatePeriodRange(r.periodStart??d.periodStart,r.periodEnd??d.periodEnd);
+      if((r.periodStart??d.periodStart)<d.periodStart || (r.periodEnd??d.periodEnd)>d.periodEnd) throw new Error("Период строки вне периода документа");
+    }
+  }
   // Original net values stay intact; document VAT is allocated proportionally.
   const netSum=roundMoney(d.rows.filter(r=>r.basis==="net").reduce((s,r)=>s+r.value,0));
   let remainingVat=parent.vat;
@@ -50,9 +58,9 @@ export async function applyVerifiedCore(ctx: MutationCtx, d: Infer<typeof verifi
   const invoicePatch: Partial<Doc<"invoices">>={contentSha256:d.sha256,fileHash:d.sha256,periodStart:d.periodStart,periodEnd:d.periodEnd,periodKey,month,multiMonth:isMultiMonthRange(d.periodStart,d.periodEnd),vatRate:d.vatRate};
   if (!d.parentInvoiceId) Object.assign(invoicePatch,{serviceTotal:d.serviceTotal,amountDue:d.amountDue??invoice.total,openingBalance:d.openingBalance,payments:d.payments});
   else invoicePatch.expenseId=charge._id;
-  const amount=d.serviceTotal===parent.total?charge.amount:roundMoney(d.serviceTotal/(1+(d.vatRate??0)/100));
+  const amount=explicitTax?d.serviceAmount!:d.serviceTotal===parent.total?charge.amount:roundMoney(d.serviceTotal/(1+(d.vatRate??0)/100));
   const chargePatch: Partial<Doc<"expenses">>={kind:"charge",contractId:contract._id,invoiceId:parent._id,periodStart:d.periodStart,periodEnd:d.periodEnd,periodKey,month,multiMonth:isMultiMonthRange(d.periodStart,d.periodEnd),serviceCategory:category,type:category,amount,vat:roundMoney(d.serviceTotal-amount),total:d.serviceTotal};
-  if (d.serviceTotal!==parent.total) Object.assign(chargePatch,{basis:"Стоимость услуг за период, отдельно от остатка и суммы к оплате",vatBasis:"computedFromInvoiceRate"});
+  if (d.serviceTotal!==parent.total) Object.assign(chargePatch,{basis:"Стоимость услуг за период, отдельно от остатка и суммы к оплате",vatBasis:explicitTax?"explicit":"computedFromInvoiceRate"});
   const contractPatch:Partial<Doc<"contracts">>={feeBasis:"invoiceEstimate",dateBasis:d.contractStartDate || contract.dateBasis==="originalDocument" ? "originalDocument":"unknown",endDateBasis:"unknown",sourceInvoiceId:parent._id,serviceCategory:category,type:category};
   if(d.contractStartDate)contractPatch.startDate=d.contractStartDate;
   const changed=(prev:object,patch:object)=>Object.entries(patch).some(([key,value])=>Reflect.get(prev,key)!==value);
@@ -70,7 +78,8 @@ export async function applyVerifiedCore(ctx: MutationCtx, d: Infer<typeof verifi
       sim=(await ctx.db.get(id))??undefined;if(sim)sims.push(sim);
     }
     const vatBasis=r.basis==="net"?"allocatedFromDocumentVat":"grossOnlyTaxNotSplit";
-    await ctx.db.insert("expenses",{companyId:contract.companyId,contractId:contract._id,contract:contract.number,operator:invoice.operator,type:category,serviceCategory:category,kind:"allocation",parentExpenseId:charge._id,invoiceId:invoice._id,simCardId:sim?._id,simNumber:r.number||undefined,amount:r.net,vat:r.vat,total:r.value,vatBasis,month,periodKey,periodStart:d.periodStart,periodEnd:d.periodEnd,status:"confirmed",hasDocument:true,description:r.description,sourcePage:r.sourcePage,sourceRowKey:r.key,serviceIdentifier:r.serviceIdentifier||undefined,basis:r.evidence,createdAt:Date.now()});
+    const rowStart=r.periodStart??d.periodStart,rowEnd=r.periodEnd??d.periodEnd;
+    await ctx.db.insert("expenses",{companyId:contract.companyId,contractId:contract._id,contract:contract.number,operator:invoice.operator,type:category,serviceCategory:category,kind:"allocation",parentExpenseId:charge._id,invoiceId:invoice._id,simCardId:sim?._id,simNumber:r.number||undefined,amount:r.net,vat:r.vat,total:r.value,vatBasis,month:monthLabelFromPeriod(rowEnd),periodKey:toPeriodKey(rowEnd),periodStart:rowStart,periodEnd:rowEnd,multiMonth:isMultiMonthRange(rowStart,rowEnd),status:"confirmed",hasDocument:true,description:r.description,sourcePage:r.sourcePage,sourceRowKey:r.key,serviceIdentifier:r.serviceIdentifier||undefined,basis:r.evidence,createdAt:Date.now()});
   }
   if(pending.length||updates)await writeAudit(ctx,{entityType:"invoice",entityId:`${invoice._id}`,action:"verified_original_backfill",reason:"Сверка оригинала PDF",details:{sha256:d.sha256,rows:pending.length,updates}});
   return {allocations:pending.length,updates,total,unallocated:roundMoney(d.serviceTotal-existingTotal-pending.reduce((s,r)=>s+r.value,0))};

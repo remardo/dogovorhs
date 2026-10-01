@@ -78,6 +78,19 @@ function invoiceArgs(
 }
 
 describe("verified original backfill", () => {
+  it("keeps payable and credit separate from explicit service VAT and row periods", async () => {
+    const ctx=sharedCtx();const refs=await seedCompanyContract(ctx.db);
+    const invoice=await createInvoiceCore(ctx.mutation,invoiceArgs(refs,{amount:2967.23,vat:652.77,total:3620}),{withCharge:true});
+    const document={invoiceId:ids<"invoices">(invoice.invoiceId),sha256:"c".repeat(64),expectedTotal:3620,serviceTotal:7240,serviceAmount:5934.44,serviceVat:1305.56,amountDue:3620,openingBalance:-3620,periodStart:"2025-11-01",periodEnd:"2025-12-31",rows:[{sourcePage:1,evidence:"Интернет 2150.00",number:"",value:2150,basis:"gross" as const,description:"Интернет за декабрь",serviceIdentifier:"",periodStart:"2025-12-01",periodEnd:"2025-12-31"}]};
+    await applyVerifiedCore(ctx.mutation,document,false);
+    const expenses=await ctx.db.query("expenses").collect();
+    expect(sumCharges(expenses)).toBe(7240);
+    expect(expenses.find(e=>e.kind==="charge")).toMatchObject({amount:5934.44,vat:1305.56,vatBasis:"explicit"});
+    expect(expenses.find(e=>e.kind==="allocation")).toMatchObject({periodStart:"2025-12-01",periodKey:"2025-12"});
+    expect((await ctx.db.get(document.invoiceId))?.total).toBe(3620);
+    await expect(applyVerifiedCore(ctx.mutation,{...document,serviceVat:1},true)).rejects.toThrow(/суммы услуг/);
+    await expect(applyVerifiedCore(ctx.mutation,{...document,rows:[{...document.rows[0],periodEnd:"2026-01-31"}]},true)).rejects.toThrow(/Период строки/);
+  });
   it("allocates explicit net rows with documented VAT without changing the charge", async () => {
     const ctx=sharedCtx(); const refs=await seedCompanyContract(ctx.db);
     const invoice=await createInvoiceCore(ctx.mutation,invoiceArgs(refs,{amount:100,vat:22,total:122}),{withCharge:true});

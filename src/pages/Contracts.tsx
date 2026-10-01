@@ -526,19 +526,7 @@ const Contracts = () => {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="simCount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Количество SIM</FormLabel>
-                      <FormControl>
-                        <Input type="number" min={0} step={1} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <p className="text-sm text-muted-foreground">Количество номеров определяется по привязанным записям.</p>
 
                 <div className="md:col-span-2 flex justify-end gap-2 pt-2">
                   <Button variant="outline" type="button" onClick={() => setOpen(false)}>
@@ -1234,19 +1222,7 @@ const Contracts = () => {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={editForm.control}
-                name="simCount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Количество SIM</FormLabel>
-                    <FormControl>
-                      <Input type="number" min={0} step={1} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <p className="text-sm text-muted-foreground">Количество номеров определяется по привязанным записям.</p>
 
               <div className="md:col-span-2 flex justify-end gap-2 pt-2">
                 <Button variant="outline" type="button" onClick={() => setEditOpen(false)}>

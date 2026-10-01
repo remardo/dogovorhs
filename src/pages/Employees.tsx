@@ -240,19 +240,7 @@ const Employees = () => {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="simCount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>SIM-карт</FormLabel>
-                      <FormControl>
-                        <Input type="number" min={0} step={1} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <p className="text-sm text-muted-foreground">Количество номеров определяется по привязанным записям.</p>
                 <FormField
                   control={form.control}
                   name="maxSim"
@@ -357,10 +345,10 @@ const Employees = () => {
                   <div className="flex items-center gap-3 min-w-32">
                     <div className="flex-1">
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="font-medium">{employee.simCount}</span>
+                        <span className="font-medium">{(employee.computedSimCount ?? employee.simCount)}</span>
                         <span className="text-muted-foreground">/ {employee.maxSim}</span>
                       </div>
-                      <Progress value={(employee.simCount / employee.maxSim) * 100} className="h-1.5" />
+                      <Progress value={((employee.computedSimCount ?? employee.simCount) / (employee.maxSim || 1)) * 100} className="h-1.5" />
                     </div>
                   </div>
                 </td>
@@ -448,7 +436,7 @@ const Employees = () => {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">SIM</span>
                 <span className="font-medium">
-                  {viewEmployee.simCount} / {viewEmployee.maxSim}
+                  {viewEmployee.computedSimCount ?? viewEmployee.simCount} / {viewEmployee.maxSim}
                 </span>
               </div>
 
@@ -629,19 +617,7 @@ const Employees = () => {
                   </FormItem>
                 )}
               />
-              <FormField
-                control={editForm.control}
-                name="simCount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>SIM-карт</FormLabel>
-                    <FormControl>
-                      <Input type="number" min={0} step={1} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <p className="text-sm text-muted-foreground">Количество номеров определяется по привязанным записям.</p>
               <FormField
                 control={editForm.control}
                 name="maxSim"
