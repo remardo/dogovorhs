@@ -1,3 +1,4 @@
+import { detectOperator } from "./invoiceParser";
 /**
  * Additive accounting helpers (pure, no Convex imports).
  * Charge vs allocation, service periods, document identity, money checks.
@@ -217,7 +218,7 @@ export function buildDocumentKey(parts: {
     throw new Error(`Некорректная дата документа: ${parts.invoiceDate || "пусто"}`);
   }
   return [
-    normalizeOperatorName(parts.operator),
+    normalizeOperatorName(detectOperator(parts.operator) || parts.operator),
     parts.companyKey.trim().toLowerCase(),
     normalizeInvoiceNo(parts.invoiceNo),
     invoiceDateIso,

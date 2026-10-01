@@ -93,7 +93,7 @@ const Invoices = () => {
               : preview.suggested.operator,
           contractId: preview.suggested.contractId ?? "__none",
           companyId: preview.suggested.companyId ?? "__none",
-          serviceType: /МТС|Ростелеком|ЭР-Телеком/.test(preview.suggested.operator) ? "Интернет" : "Мобильная связь",
+          serviceType: preview.suggested.serviceType ?? "Прочее",
           kind: /детализац|расшифровк/i.test(file.name) ? "detail" : "invoice",
           busy: false,
         }]);

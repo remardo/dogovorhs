@@ -8,6 +8,7 @@ import { requireAuthIfEnabled } from "./_lib/auth";
 import { api, internal } from "./_generated/api";
 import {
   detectOperator,
+  fixMojibake,
   monthLabelFromPeriod,
   normalizeContractNumber,
   parseInvoiceText,
@@ -23,6 +24,7 @@ export type InvoicePreviewResult = {
   parsed: ReturnType<typeof parseInvoiceText> & { month: string };
   suggested: {
     operator: string;
+    serviceType?: string;
     contractId?: string;
     contractNumber: string;
     companyId?: string;
@@ -63,7 +65,7 @@ export const previewText = action({
     const parsed = parseInvoiceText(text);
 
     const contracts: ContractListResult = await ctx.runQuery(api.contracts.list, {});
-    const operator = detectOperator(`${fileName}\n${parsed.subscriber}`);
+    const operator = detectOperator(fixMojibake(text).slice(0,6000)) || detectOperator(fileName);
     const want = normalizeContractNumber(parsed.contractNumber);
     let candidates = parsed.contractNumber
       ? contracts.items.filter(
@@ -72,8 +74,7 @@ export const previewText = action({
         )
       : [];
     if (operator) {
-      const byOperator = candidates.filter((c) => c.operator === operator);
-      if (byOperator.length > 0) candidates = byOperator;
+      candidates = candidates.filter((c) => (detectOperator(c.operator)||c.operator) === operator);
     }
 
     let companyId: string | undefined;
@@ -82,8 +83,7 @@ export const previewText = action({
       const byInn = companies.find((c) => c.inn === parsed.subscriberInn);
       if (byInn) {
         companyId = byInn.id;
-        const byCompany = candidates.filter((c) => `${c.companyId}` === companyId);
-        if (byCompany.length > 0) candidates = byCompany;
+        candidates = candidates.filter((c) => `${c.companyId}` === companyId);
       }
     }
     const contract = candidates.length === 1 ? candidates[0] : undefined;
@@ -112,7 +112,8 @@ export const previewText = action({
     return {
       parsed: { ...parsed, month: monthLabelFromPeriod(parsed.periodEnd || parsed.periodStart) },
       suggested: {
-        operator,
+        operator:contract?.operator ?? operator,
+        serviceType:contract?.serviceCategory ?? contract?.type,
         contractId: contract ? contract.id : undefined,
         contractNumber: contract?.number ?? parsed.contractNumber,
         companyId,

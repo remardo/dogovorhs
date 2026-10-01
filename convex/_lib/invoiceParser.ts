@@ -39,7 +39,7 @@ const OPERATOR_MARKERS: { name: string; markers: string[] }[] = [
   { name: "Вымпелком (Билайн)", markers: ["ВымпелКом", "beeline.ru", "БИЛАЙН"] },
   { name: "Мегафон", markers: ["МегаФон", "Мегафон"] },
   { name: "МТС", markers: ['ПАО "МТС"', "МТС-БАНК"] },
-  { name: "Т2 Мобайл", markers: ["Т2 Мобайл", "Т2 МОБАЙЛ"] },
+  { name: "Т2 Мобайл", markers: ["Т2 Мобайл", "Т2 МОБАЙЛ", "Теле2", "Tele2"] },
   { name: "Ростелеком", markers: ["РОСТЕЛЕКОМ", "Ростелеком"] },
   { name: "ЭР-Телеком", markers: ["ЭР-Телеком", "ЭР-ТЕЛЕКОМ", "b2b.dom.ru"] },
   { name: "Уфанет", markers: ["Уфанет", "УФАНЕТ"] },
@@ -119,7 +119,7 @@ function cp1251Decode(bytes: number[]): string {
 
 export function detectOperator(text: string): string {
   for (const { name, markers } of OPERATOR_MARKERS) {
-    if (markers.some((m) => text.includes(m))) return name;
+    if (markers.some((m) => text.toLowerCase().includes(m.toLowerCase()))) return name;
   }
   return "";
 }

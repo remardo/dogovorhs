@@ -1105,6 +1105,7 @@ export type InvoicePreview = {
   };
   suggested: {
     operator: string;
+    serviceType?: string;
     contractId?: string;
     contractNumber: string;
     companyId?: string;

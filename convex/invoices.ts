@@ -16,6 +16,7 @@ import {
   validatePeriodRange,
   type ChargeCandidate,
 } from "./_lib/accounting";
+import { detectOperator } from "./_lib/invoiceParser";
 import { writeAudit } from "./_lib/audit";
 
 export type InvoiceListItem = {
@@ -248,7 +249,7 @@ export async function createInvoiceCore(
   if(resolved.contract){
     const operator=await ctx.db.get(resolved.contract.operatorId);
     if(args.operatorId && args.operatorId!==resolved.contract.operatorId)throw new Error("Оператор не соответствует договору");
-    if(operator && operator.name.trim().toLowerCase()!==args.operator.trim().toLowerCase())throw new Error("Название оператора не соответствует выбранному договору");
+    if(operator && (detectOperator(operator.name)||operator.name).trim().toLowerCase()!==(detectOperator(args.operator)||args.operator).trim().toLowerCase())throw new Error("Название оператора не соответствует выбранному договору");
   }
   const now = Date.now();
   const invoiceId = await ctx.db.insert("invoices", {
