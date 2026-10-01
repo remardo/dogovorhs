@@ -7,6 +7,7 @@ import {
   Building2,
   Wifi,
   CreditCard,
+  Receipt,
   Settings,
   ChevronDown,
   CircleDot,
@@ -112,6 +113,7 @@ const Sidebar = () => {
           <NavItem to="/sim-cards" icon={<Smartphone className="h-5 w-5" />} label="SIM-карты" />
           <NavItem to="/employees" icon={<Users className="h-5 w-5" />} label="Сотрудники" />
           <NavItem to="/expenses" icon={<CreditCard className="h-5 w-5" />} label="Расходы" />
+          <NavItem to="/invoices" icon={<Receipt className="h-5 w-5" />} label="Счета" />
 
           <div className="pt-4 pb-2">
             <p className="px-3 text-xs font-medium text-sidebar-foreground/50 uppercase tracking-wider">

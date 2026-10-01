@@ -27,6 +27,10 @@ coverage/
 *.xlsx
 *.csv
 *.pdf
+*.PDF
+
+# Local billing inbox (source PDFs, never commit, never serve)
+billing-inbox/
 
 # Local screenshots / dumps
 Screenshot_*.jpg

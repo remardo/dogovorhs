@@ -715,6 +715,112 @@ export function useExpenses() {
   return { ...data, isLoading, error, refreshExpenses, refresh, createExpense, updateExpense, deleteExpense };
 }
 
+export type Invoice = {
+  id: string;
+  fileName: string;
+  fileUrl: string | null;
+  operator: string;
+  kind: "invoice" | "detail";
+  invoiceNo: string;
+  invoiceDate: string;
+  periodStart: string;
+  periodEnd: string;
+  month: string;
+  contractNumber: string;
+  contractId?: string;
+  contract: string;
+  companyId?: string;
+  company: string;
+  amount: number;
+  vat: number;
+  total: number;
+  status: "draft" | "matched";
+  expenseId?: string;
+  note: string;
+  createdAt: number;
+};
+
+export type InvoicePreview = {
+  parsed: {
+    invoiceNo: string;
+    invoiceDate: string;
+    periodStart: string;
+    periodEnd: string;
+    contractNumber: string;
+    accountNumber: string;
+    subscriber: string;
+    subscriberInn: string;
+    amount: number;
+    vat: number;
+    total: number;
+    notes: string[];
+    month: string;
+  };
+  suggested: {
+    operator: string;
+    contractId?: string;
+    contractNumber: string;
+    companyId?: string;
+  };
+  existingExpense?: { id: string; total: number };
+};
+
+type InvoicesData = {
+  items: Invoice[];
+  companies: ContractOption[];
+  contracts: { id: string; name: string }[];
+  summary: { total: number; matched: number; draft: number };
+};
+
+const emptyInvoices: InvoicesData = {
+  items: [],
+  companies: [],
+  contracts: [],
+  summary: { total: 0, matched: 0, draft: 0 },
+};
+
+export function useInvoices() {
+  const { data, isLoading, error, refresh } = useConvexQuery(emptyInvoices, () =>
+    convexClient!.query(api.invoices.list, {}),
+  );
+
+  const updateInvoice = async (payload: {
+    id: string;
+    contractId?: string;
+    contractNumber?: string;
+    companyId?: string;
+    note?: string;
+  }) => {
+    if (!requireClient()) return;
+    await mutateAndRefresh(
+      () =>
+        convexClient!.mutation(api.invoices.update, {
+          id: payload.id as Id<"invoices">,
+          ...(payload.contractId ? { contractId: payload.contractId as Id<"contracts"> } : {}),
+          ...(payload.contractNumber !== undefined ? { contractNumber: payload.contractNumber } : {}),
+          ...(payload.companyId ? { companyId: payload.companyId as Id<"companies"> } : {}),
+          ...(payload.note !== undefined ? { note: payload.note } : {}),
+        }),
+      refresh,
+      "invoices:update",
+    );
+  };
+
+  const deleteInvoice = async (id: string) => {
+    if (!id) {
+      notifyValidation("Нет идентификатора счёта");
+      return;
+    }
+    await mutateAndRefresh(
+      () => convexClient!.mutation(api.invoices.remove, { id: id as Id<"invoices"> }),
+      refresh,
+      "invoices:remove",
+    );
+  };
+
+  return { ...data, isLoading, error, refresh, updateInvoice, deleteInvoice };
+}
+
 type SimCardsData = {
   items: SimCard[];
   companies: ContractOption[];

@@ -203,10 +203,14 @@ async function loadPdfJs() {
     globalThis.structuredClone = ((value: unknown) => JSON.parse(JSON.stringify(value))) as typeof structuredClone;
   }
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  if (pdfjs.GlobalWorkerOptions) {
-    const require = createRequire(import.meta.url);
-    const workerPath = require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs");
-    pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
+  try {
+    if (pdfjs.GlobalWorkerOptions) {
+      const require = createRequire(import.meta.url);
+      const workerPath = require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs");
+      pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).toString();
+    }
+  } catch {
+    // воркер-файла может не быть в бандле экшена — работаем с disableWorker
   }
   return pdfjs;
 }

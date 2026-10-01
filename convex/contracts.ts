@@ -103,6 +103,23 @@ export const update = mutation({
   },
 });
 
+export const updateOperator = mutation({
+  args: {
+    id: v.id("contracts"),
+    operatorId: v.id("operators"),
+  },
+  handler: async (ctx, args) => {
+    await requireAuthIfEnabled(ctx);
+    const { db } = ctx;
+    const contract = await db.get(args.id);
+    if (!contract) throw new Error("Договор не найден");
+    const operator = await db.get(args.operatorId);
+    if (!operator) throw new Error("Оператор не найден");
+    await db.patch(args.id, { operatorId: args.operatorId });
+    return { ok: true };
+  },
+});
+
 export const remove = mutation({
   args: { id: v.id("contracts") },
   handler: async (ctx, { id }) => {

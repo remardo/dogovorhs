@@ -9,6 +9,7 @@ const Contracts = lazy(() => import("./pages/Contracts"));
 const SimCards = lazy(() => import("./pages/SimCards"));
 const Employees = lazy(() => import("./pages/Employees"));
 const Expenses = lazy(() => import("./pages/Expenses"));
+const Invoices = lazy(() => import("./pages/Invoices"));
 const Companies = lazy(() => import("./pages/Companies"));
 const Operators = lazy(() => import("./pages/Operators"));
 const Tariffs = lazy(() => import("./pages/Tariffs"));
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/sim-cards" element={<SimCards />} />
           <Route path="/employees" element={<Employees />} />
           <Route path="/expenses" element={<Expenses />} />
+          <Route path="/invoices" element={<Invoices />} />
           <Route path="/companies" element={<Companies />} />
           <Route path="/operators" element={<Operators />} />
           <Route path="/tariffs" element={<Tariffs />} />

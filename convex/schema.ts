@@ -104,6 +104,31 @@ export default defineSchema({
     .index("by_company_month", ["companyId", "month"])
     .index("by_import", ["importId"]),
 
+  invoices: defineTable({
+    fileId: v.id("_storage"),
+    fileName: v.string(),
+    operator: v.string(),
+    kind: v.union(v.literal("invoice"), v.literal("detail")),
+    invoiceNo: v.string(),
+    invoiceDate: v.string(),
+    periodStart: v.string(),
+    periodEnd: v.string(),
+    month: v.string(),
+    contractNumber: v.string(),
+    contractId: v.optional(v.id("contracts")),
+    companyId: v.optional(v.id("companies")),
+    amount: v.number(),
+    vat: v.number(),
+    total: v.number(),
+    status: v.union(v.literal("draft"), v.literal("matched")),
+    expenseId: v.optional(v.id("expenses")),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_contract", ["contractId"])
+    .index("by_company", ["companyId"])
+    .index("by_created", ["createdAt"]),
+
   billingImports: defineTable({
     fileId: v.id("_storage"),
     fileName: v.string(),
