@@ -14,6 +14,10 @@ export type ParsedInvoice = {
   amount: number;
   vat: number;
   total: number;
+  serviceTotal?: number;
+  amountDue?: number;
+  vatRate?: number;
+  vatBasis?: string;
   notes: string[];
 };
 
@@ -562,11 +566,24 @@ export function parseInvoiceText(rawText: string): ParsedInvoice {
       amount = Math.round((total - vat) * 100) / 100;
     }
   }
-  if (total && !vat && /22\s*%|НДС/i.test(text)) {
-    amount = Math.round((total / 1.22) * 100) / 100;
-    vat = Math.round((total - amount) * 100) / 100;
-    notes.push("НДС расчётный (22%)");
+  if (!total) {
+    total = money(`Всего к оплате(?: за период)?[^\\d]*(${NUM})`) || money(`Сумма начислений[^\\n\\d]*\\s*(${NUM})`);
+    vat = money(`в том числе НДС[^\\n]*?\\)\\s*(${NUM})`);
+    amount = Math.round((total - vat) * 100) / 100;
   }
+  const rate = text.match(/(?:НДС\s*[:(]?\s*|\s)(\d{1,2}(?:[.,]\d+)?)\s*%/i);
+  const taxFree = /без\s+НДС|НДС\s+не\s+облагается/i.test(text);
+  res.vatRate = taxFree ? 0 : rate ? Number(rate[1].replace(",", ".")) : undefined;
+  res.vatBasis = vat ? "explicit" : taxFree ? "taxFree" : "unknown";
+  if (total && !vat && !taxFree && res.vatRate !== undefined) {
+    amount = Math.round((total / (1 + res.vatRate / 100)) * 100) / 100;
+    vat = Math.round((total - amount) * 100) / 100;
+    res.vatBasis = "computedFromInvoiceRate";
+    notes.push(`НДС расчётный (${res.vatRate}%)`);
+  }
+  const services = money(`Общая сумма начислений[^\\d]*(${NUM})`);
+  if (services) res.serviceTotal = services;
+  if (/Т2\s+Мобайл/i.test(text)) res.amountDue = total;
   res.amount = amount;
   res.vat = vat;
   res.total = total;
@@ -576,7 +593,8 @@ export function parseInvoiceText(rawText: string): ParsedInvoice {
 }
 
 export function monthLabelFromPeriod(periodEnd: string): string {
-  const m = periodEnd.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  const iso = periodEnd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const m = iso ? [iso[0], iso[3], iso[2], iso[1]] : periodEnd.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (!m) return "текущий период";
   const names = [
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",

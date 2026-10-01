@@ -6,7 +6,7 @@ import { pathToFileURL } from "url";
 
 type TextLine = { text: string };
 
-const VAT_RATE = 0.2;
+
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
@@ -114,6 +114,9 @@ function extractContractNumber(lines: TextLine[]) {
 
 export async function parseMegafonPdfRows(data: ArrayBuffer): Promise<ImportRow[]> {
   const lines = await extractLines(data);
+  const taxText=lines.map(l => l.text).join("\n");
+  const taxRateMatch=taxText.match(/НДС[^\n\d]{0,8}(\d{1,2})\s*%/i);
+  const vatRate=/без\s+НДС/i.test(taxText) ? 0 : taxRateMatch ? Number(taxRateMatch[1])/100 : undefined;
   const { periodStart, periodEnd } = extractPeriod(lines);
   const contractNumber = extractContractNumber(lines);
   const month = monthLabel(periodEnd || periodStart);
@@ -122,7 +125,7 @@ export async function parseMegafonPdfRows(data: ArrayBuffer): Promise<ImportRow[
   let currentPhone = "";
   let currentTariff = "";
   let currentTotal = 0;
-  let currentVat = 0;
+  let currentVat: number | undefined;
   let expectTotals = false;
 
   const flush = () => {
@@ -130,7 +133,7 @@ export async function parseMegafonPdfRows(data: ArrayBuffer): Promise<ImportRow[
     const normalizedPhone = normalizePhone(currentPhone);
     if (!normalizedPhone) return;
     const total = currentTotal;
-    const vat = currentVat || roundCurrency(total * (VAT_RATE / (1 + VAT_RATE)));
+    const vat = currentVat ?? (vatRate !== undefined ? roundCurrency(total * (vatRate / (1 + vatRate))) : 0);
     const amount = roundCurrency(total - vat);
     if (total <= 0 && vat <= 0 && amount <= 0) return;
     rows.push({
@@ -144,7 +147,7 @@ export async function parseMegafonPdfRows(data: ArrayBuffer): Promise<ImportRow[
       amount,
       vat,
       total,
-      vatMismatch: false,
+      vatMismatch: currentVat === undefined && vatRate === undefined,
       tariffFee: 0,
       isVatOnly: false,
     });
@@ -156,7 +159,7 @@ export async function parseMegafonPdfRows(data: ArrayBuffer): Promise<ImportRow[
       currentPhone = extractPhone(line.text);
       currentTariff = "";
       currentTotal = 0;
-      currentVat = 0;
+      currentVat = undefined;
       expectTotals = false;
       continue;
     }
@@ -187,7 +190,7 @@ export async function parseMegafonPdfRows(data: ArrayBuffer): Promise<ImportRow[
     }
     if (line.text.includes("не потреблялись")) {
       currentTotal = 0;
-      currentVat = 0;
+      currentVat = undefined;
     }
   }
   flush();

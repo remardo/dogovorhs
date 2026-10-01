@@ -130,7 +130,89 @@ function cellPrimitive(value: ExcelJS.CellValue): unknown {
 
 type ExcelBuffer = Parameters<ExcelJS.Xlsx["load"]>[0];
 
+/** OLE2 compound-document signature (legacy .xls). */
+export function isOleXls(data: ArrayBuffer): boolean {
+  if (data.byteLength < 8) return false;
+  const bytes = new Uint8Array(data.slice(0, 8));
+  return (
+    bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0 &&
+    bytes[4] === 0xa1 && bytes[5] === 0xb1 && bytes[6] === 0x1a && bytes[7] === 0xe1
+  );
+}
+
+function rowFromRecord(get: (header: string) => unknown): ImportRow | null {
+  const contractNumber = normalizeContractNumber(get(COLUMN.contract));
+  if (!contractNumber) return null;
+
+  const phone = normalizePhone(get(COLUMN.phone));
+  const isVatOnly = phone === "" || /^0+$/.test(phone);
+  const tariffValue = get(COLUMN.tariff);
+  const tariffName = tariffValue === null || tariffValue === undefined ? "" : String(tariffValue).trim();
+  const periodStart = formatDate(get(COLUMN.periodStart));
+  const periodEnd = formatDate(get(COLUMN.periodEnd));
+  const amount = toNumber(get(COLUMN.amount));
+  const vatFromTable = toNumber(get(COLUMN.vat));
+  const totalFromTable = toNumber(get(COLUMN.total));
+  const tariffFee = toNumber(get(COLUMN.tariffFee));
+  const vat = vatFromTable;
+  const resolvedTotal = totalFromTable > 0 ? totalFromTable : amount + vatFromTable;
+
+  if (resolvedTotal <= 0 && vat <= 0 && amount <= 0) return null;
+
+  const month = monthLabel(periodEnd || periodStart);
+  return {
+    rowIndex: 0,
+    phone,
+    contractNumber,
+    tariffName,
+    periodStart,
+    periodEnd,
+    month,
+    amount,
+    vat,
+    total: resolvedTotal,
+    vatMismatch: false,
+    tariffFee,
+    isVatOnly,
+  };
+}
+
+/** Legacy .xls (OLE2/BIFF) via official SheetJS 0.20.3; XLSX stays on ExcelJS. */
+export async function parseRowsXls(data: ArrayBuffer): Promise<ImportRow[]> {
+  const XLSX = await import("xlsx");
+  const workbook = XLSX.read(new Uint8Array(data), { type: "array", cellDates: true });
+  const firstName = workbook.SheetNames[0];
+  if (!firstName) return [];
+  const sheet = workbook.Sheets[firstName];
+  const table = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: true, defval: null });
+  if (!table.length) return [];
+  const headers = (table[0] as unknown[]).map((h) => String(h ?? "").trim());
+  const indexByHeader = new Map<string, number>();
+  headers.forEach((header, index) => {
+    if (header && !indexByHeader.has(header)) indexByHeader.set(header, index);
+  });
+  if (indexByHeader.size === 0) return [];
+  const rows: ImportRow[] = [];
+  for (let i = 1; i < table.length; i += 1) {
+    const values = table[i] as unknown[];
+    const get = (header: string): unknown => {
+      const index = indexByHeader.get(header);
+      return index === undefined ? null : (values[index] ?? null);
+    };
+    const row = rowFromRecord(get);
+    if (row) {
+      row.rowIndex = rows.length + 1;
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
 export async function parseRows(data: ArrayBuffer): Promise<ImportRow[]> {
+  // True XLS support: OLE2 containers are not ZIP and crash ExcelJS.
+  if (isOleXls(data)) {
+    return await parseRowsXls(data);
+  }
   const workbook = new ExcelJS.Workbook();
   // На runtime это настоящий Buffer; каст нужен только из-за расхождения
   // generic-типов Buffer между @types/node и типами exceljs.
@@ -160,42 +242,11 @@ export async function parseRows(data: ArrayBuffer): Promise<ImportRow[]> {
   const rows: ImportRow[] = [];
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber === 1) return;
-    const contractNumber = normalizeContractNumber(getValue(row, COLUMN.contract));
-    if (!contractNumber) return;
-
-    const phone = normalizePhone(getValue(row, COLUMN.phone));
-    const isVatOnly = phone === "" || /^0+$/.test(phone);
-    const tariffValue = getValue(row, COLUMN.tariff);
-    const tariffName = tariffValue === null ? "" : String(tariffValue).trim();
-    const periodStart = formatDate(getValue(row, COLUMN.periodStart));
-    const periodEnd = formatDate(getValue(row, COLUMN.periodEnd));
-    const amount = toNumber(getValue(row, COLUMN.amount));
-    const vatFromTable = toNumber(getValue(row, COLUMN.vat));
-    const totalFromTable = toNumber(getValue(row, COLUMN.total));
-    const tariffFee = toNumber(getValue(row, COLUMN.tariffFee));
-    const vat = vatFromTable;
-    const resolvedTotal = totalFromTable > 0 ? totalFromTable : amount + vatFromTable;
-    const vatMismatch = false;
-
-    if (resolvedTotal <= 0 && vat <= 0 && amount <= 0) return;
-
-    const month = monthLabel(periodEnd || periodStart);
-
-    rows.push({
-      rowIndex: rows.length + 1,
-      phone,
-      contractNumber,
-      tariffName,
-      periodStart,
-      periodEnd,
-      month,
-      amount,
-      vat,
-      total: resolvedTotal,
-      vatMismatch,
-      tariffFee,
-      isVatOnly,
-    });
+    const parsed = rowFromRecord((header) => getValue(row, header));
+    if (parsed) {
+      parsed.rowIndex = rows.length + 1;
+      rows.push(parsed);
+    }
   });
 
   return rows;

@@ -1,9 +1,10 @@
 import React from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Filter, MoreHorizontal, CreditCard, Eye, Pencil, Archive, Trash2 } from "lucide-react";
+import { Plus, Search, MoreHorizontal, CreditCard, Eye, Pencil, Archive, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,6 +53,8 @@ type FormValues = z.infer<typeof formSchema>;
 
 const Tariffs = () => {
   const { items: tariffs, operators, createTariff, updateTariff, deleteTariff } = useTariffs();
+  const [params,setParams]=useSearchParams();
+  const selected=tariffs.find(t=>t.id===params.get("id"));
   const [open, setOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
   const [editTariff, setEditTariff] = React.useState<(typeof tariffs)[number] | null>(null);
@@ -80,6 +83,7 @@ const Tariffs = () => {
   }, [form, operators]);
 
   const onSubmit = async (values: FormValues) => {
+    try {
     await createTariff(values);
     toast({ title: "Тариф добавлен" });
     setOpen(false);
@@ -93,6 +97,7 @@ const Tariffs = () => {
       sms: null,
       status: "active",
     });
+    } catch(error) { toast({title:"Не сохранено",description:error instanceof Error ? error.message : String(error),variant:"destructive"}); }
   };
 
   const editForm = useForm<FormValues>({
@@ -114,6 +119,7 @@ const Tariffs = () => {
   }, [editTariff, editForm]);
 
   const onEditSubmit = async (values: FormValues) => {
+    try {
     if (!editTariff) return;
     await updateTariff({
       ...editTariff,
@@ -124,6 +130,7 @@ const Tariffs = () => {
     });
     toast({ title: "Тариф обновлен" });
     setEditOpen(false);
+    } catch(error) { toast({title:"Не сохранено",description:error instanceof Error ? error.message : String(error),variant:"destructive"}); }
   };
 
   const filteredTariffs = React.useMemo(() => {
@@ -328,9 +335,7 @@ const Tariffs = () => {
           </SelectContent>
         </Select>
 
-        <Button variant="outline" size="icon">
-          <Filter className="h-4 w-4" />
-        </Button>
+
       </div>
 
       {/* Table */}
@@ -358,7 +363,7 @@ const Tariffs = () => {
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
                       <CreditCard className="h-4 w-4 text-primary" />
                     </div>
-                    <span className="font-medium">{tariff.name}</span>
+                    <Link className="font-medium text-primary underline" to={`?id=${tariff.id}`}>{tariff.name}</Link>
                   </div>
                 </td>
                 <td className="text-sm text-muted-foreground">{tariff.operator}</td>
@@ -383,7 +388,7 @@ const Tariffs = () => {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onSelect={()=>setParams({id:tariff.id})}>
                         <Eye className="h-4 w-4 mr-2" />
                         Просмотр
                       </DropdownMenuItem>
@@ -396,7 +401,7 @@ const Tariffs = () => {
                         <Pencil className="h-4 w-4 mr-2" />
                         Редактировать
                       </DropdownMenuItem>
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onSelect={()=>updateTariff({...tariff,status:"archive"}).catch(error=>toast({title:"Не сохранено",description:String(error),variant:"destructive"}))}>
                         <Archive className="h-4 w-4 mr-2" />
                         В архив
                       </DropdownMenuItem>
@@ -562,6 +567,7 @@ const Tariffs = () => {
           </Form>
         </DialogContent>
       </Dialog>
+      <Dialog open={!!selected} onOpenChange={o=>{if(!o)setParams({});}}><DialogContent><DialogHeader><DialogTitle>{selected?.name}</DialogTitle><DialogDescription>Условия тарифа</DialogDescription></DialogHeader>{selected&&<div className="space-y-2"><p>{selected.operator} · {selected.monthlyFee.toLocaleString("ru-RU")} ₽ / месяц</p><p>Интернет: {selected.dataLimitGb ?? "—"} ГБ · Минуты: {selected.minutes ?? "—"} · SMS: {selected.sms ?? "—"}</p><p>Номеров: {selected.simCount}</p><Button onClick={()=>{setEditTariff(selected);setEditOpen(true);setParams({});}}>Редактировать</Button></div>}</DialogContent></Dialog>
     </MainLayout>
   );
 };

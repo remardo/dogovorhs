@@ -1,4 +1,5 @@
 import React from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useOperators } from "@/lib/backend";
+import { useOperators, useContracts, useExpenses } from "@/lib/backend";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -35,7 +36,12 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 const Operators = () => {
-  const { items: operators, createOperator, deleteOperator } = useOperators();
+  const { items: operators, createOperator, updateOperator, deleteOperator } = useOperators();
+  const [params,setParams]=useSearchParams();
+  const {items:contracts}=useContracts();
+  const {items:expenses}=useExpenses();
+  const selected=operators.find(x=>x.id===params.get("id"));
+  const [editingId,setEditingId]=React.useState<string|null>(null);
   const [open, setOpen] = React.useState(false);
 
   const form = useForm<FormValues>({
@@ -50,7 +56,9 @@ const Operators = () => {
   });
 
   const onSubmit = async (values: FormValues) => {
-    await createOperator(values);
+    try {
+    if(editingId) await updateOperator({...values,id:editingId}); else await createOperator(values);
+    setEditingId(null);
     toast({ title: "Оператор добавлен" });
     setOpen(false);
     form.reset({
@@ -60,6 +68,7 @@ const Operators = () => {
       phone: "",
       email: "",
     });
+    } catch(error) { toast({title:"Не сохранено",description:error instanceof Error ? error.message : String(error),variant:"destructive"}); }
   };
 
   return (
@@ -69,7 +78,7 @@ const Operators = () => {
       actions={
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button onClick={()=>{setEditingId(null);form.reset();}}>
               <Plus className="h-4 w-4 mr-2" />
               Добавить оператора
             </Button>
@@ -167,7 +176,7 @@ const Operators = () => {
                   <Wifi className="h-6 w-6 text-accent" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-foreground">{operator.name}</h3>
+                  <h3 className="font-semibold text-foreground"><Link className="hover:underline text-primary" to={`?id=${operator.id}`}>{operator.name}</Link></h3>
                   <p className="text-xs text-muted-foreground">{operator.type}</p>
                 </div>
               </div>
@@ -178,11 +187,11 @@ const Operators = () => {
                   </Button>
                 </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
+                    <DropdownMenuItem onSelect={()=>setParams({id:operator.id})}>
                       <Eye className="h-4 w-4 mr-2" />
                       Просмотр
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem onSelect={()=>{setEditingId(operator.id);form.reset(operator);setOpen(true);}}>
                       <Pencil className="h-4 w-4 mr-2" />
                       Редактировать
                     </DropdownMenuItem>
@@ -236,6 +245,7 @@ const Operators = () => {
           </div>
         ))}
       </div>
+      <Dialog open={!!selected} onOpenChange={o=>{if(!o)setParams({});}}><DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>{selected?.name}</DialogTitle><DialogDescription>Договоры и расходы</DialogDescription></DialogHeader>{selected&&<div className="space-y-3"><p>Расходы за все периоды: {expenses.filter(e=>e.operator===selected.name&&e.kind!=="allocation"&&!e.voided&&e.status!=="draft").reduce((sum,e)=>sum+e.total,0).toLocaleString("ru-RU")} ₽</p>{contracts.filter(c=>c.operatorId===selected.id).map(c=><p key={c.id}><Link className="text-primary underline" to={`/contracts?id=${c.id}`}>{c.number} · {c.name || c.type}</Link></p>)}</div>}</DialogContent></Dialog>
     </MainLayout>
   );
 };

@@ -3,7 +3,7 @@ import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Filter, MoreHorizontal, Eye, Pencil, Smartphone, Trash2 } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Eye, Pencil, Smartphone, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
-import { useCompanies, useEmployeesWithMutations, useSimCards, type Employee } from "@/lib/backend";
+import { useCompanies, useEmployeeHistory, useEmployeesWithMutations, useSimCards, type Employee } from "@/lib/backend";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 const formSchema = z.object({
   name: z.string().min(2, "Введите ФИО"),
@@ -43,9 +43,12 @@ const Employees = () => {
   const { items: employees, createEmployee, updateEmployee, deleteEmployee } = useEmployeesWithMutations();
   const { items: companies } = useCompanies();
   const { items: simCards, updateSimCard } = useSimCards();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = React.useState(false);
-  const [viewEmployee, setViewEmployee] = React.useState<Employee | null>(null);
+  const [viewEmployeeId,setViewEmployeeId]=React.useState<string|null>(null);
+  const viewEmployee=employees.find(x=>x.id===(searchParams.get("id") ?? viewEmployeeId)) ?? null;
+  const setViewEmployee=(item:Employee|null)=>setViewEmployeeId(item?.id??null);
+  const history = useEmployeeHistory(viewEmployee?.id);
   const [editEmployee, setEditEmployee] = React.useState<Employee | null>(null);
   const [editOpen, setEditOpen] = React.useState(false);
   const [assignSimId, setAssignSimId] = React.useState<string>("__none");
@@ -105,6 +108,7 @@ const Employees = () => {
   }, [employees, search, companyFilter, statusFilter]);
 
   const onSubmit = async (values: FormValues) => {
+    try {
     await createEmployee({ ...values, company: "" });
     toast({ title: "Сотрудник добавлен" });
     setOpen(false);
@@ -117,9 +121,11 @@ const Employees = () => {
       simCount: 0,
       maxSim: 20,
     });
+    } catch(error) { toast({title:"Не сохранено",description:error instanceof Error ? error.message : String(error),variant:"destructive"}); }
   };
 
   const onEditSubmit = async (values: FormValues) => {
+    try {
     if (!editEmployee) return;
     await updateEmployee({
       ...editEmployee,
@@ -128,6 +134,7 @@ const Employees = () => {
     });
     toast({ title: "Сотрудник обновлен" });
     setEditOpen(false);
+    } catch(error) { toast({title:"Не сохранено",description:error instanceof Error ? error.message : String(error),variant:"destructive"}); }
   };
 
   return (
@@ -308,9 +315,7 @@ const Employees = () => {
           </SelectContent>
         </Select>
 
-        <Button variant="outline" size="icon">
-          <Filter className="h-4 w-4" />
-        </Button>
+
       </div>
 
       {/* Table */}
@@ -335,7 +340,7 @@ const Employees = () => {
                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-sm font-medium">
                       {employee.name.split(" ").slice(0, 2).map((n) => n[0]).join("")}
                     </div>
-                    <span className="font-medium">{employee.name}</span>
+                    <Link className="font-medium text-primary hover:underline" to={`?id=${employee.id}`}>{employee.name}</Link>
                   </div>
                 </td>
                 <td>{employee.company}</td>
@@ -410,7 +415,7 @@ const Employees = () => {
       </div>
 
       {/* Просмотр */}
-      <Dialog open={!!viewEmployee} onOpenChange={(open) => !open && setViewEmployee(null)}>
+      <Dialog open={!!viewEmployee} onOpenChange={(open) => !open && (setViewEmployee(null), setSearchParams(prev => {const next=new URLSearchParams(prev);next.delete("id");return next;}))}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Просмотр сотрудника</DialogTitle>
@@ -447,6 +452,9 @@ const Employees = () => {
                 </span>
               </div>
 
+              <div className="pt-2 space-y-2"><h3 className="font-medium">История назначений и расходов</h3>
+                {history.isLoading ? <p>Загрузка истории…</p> : <><p>Затраты за известные периоды: {history.expenses.reduce((sum,e)=>sum+e.total,0).toLocaleString("ru-RU")} ₽</p>{history.assignments.map(a=><p key={a.id}><Link className="text-primary underline" to={`/sim-cards?id=${a.simCardId}`}>Номер / подключение</Link> · {new Date(a.assignedAt).toLocaleDateString("ru-RU")} — {a.unassignedAt ? new Date(a.unassignedAt).toLocaleDateString("ru-RU") : "сейчас"}</p>)}{history.expenses.map(e=><p key={e.id}><Link className="text-primary underline" to={`/expenses?id=${e.id}`}>{e.month} · {e.total.toLocaleString("ru-RU")} ₽</Link></p>)}</>}
+              </div>
               <div className="pt-2">
                 <p className="text-xs font-semibold text-muted-foreground mb-2">Привязанные SIM</p>
                 <div className="space-y-2">

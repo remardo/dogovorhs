@@ -1,7 +1,9 @@
+import { Link } from "react-router-dom";
 import { Building2, FileText, Smartphone, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CompanyCardProps {
+  id: string;
   name: string;
   contracts: number;
   simCards: number;
@@ -10,13 +12,14 @@ interface CompanyCardProps {
   className?: string;
 }
 
-const CompanyCard = ({ 
-  name, 
-  contracts, 
-  simCards, 
-  employees, 
+const CompanyCard = ({
+  id,
+  name,
+  contracts,
+  simCards,
+  employees,
   monthlyExpense,
-  className 
+  className
 }: CompanyCardProps) => {
   return (
     <div className={cn("stat-card", className)}>
@@ -24,7 +27,11 @@ const CompanyCard = ({
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
           <Building2 className="h-5 w-5 text-primary" />
         </div>
-        <h3 className="font-semibold text-foreground">{name}</h3>
+        <h3 className="font-semibold text-foreground">
+          <Link to={`/companies?id=${encodeURIComponent(id)}`} className="hover:underline focus-visible:underline">
+            {name}
+          </Link>
+        </h3>
       </div>
       
       <div className="grid grid-cols-2 gap-4">
@@ -54,7 +61,7 @@ const CompanyCard = ({
         
         <div>
           <p className="text-lg font-semibold">{monthlyExpense.toLocaleString('ru-RU')} ₽</p>
-          <p className="text-xs text-muted-foreground">расходы/мес</p>
+          <p className="text-xs text-muted-foreground">расходы за период</p>
         </div>
       </div>
     </div>

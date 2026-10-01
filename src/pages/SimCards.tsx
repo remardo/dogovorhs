@@ -1,9 +1,10 @@
 ﻿import React from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Filter, MoreHorizontal, Smartphone, Eye, Pencil, UserPlus, Trash2 } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Smartphone, Eye, Pencil, UserPlus, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,14 +20,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useExpenses, useSimCards, type Expense, type SimCard } from "@/lib/backend";
+import { useContracts, useEmployees, useExpenses, useInvoices, useSimCards, useSimHistory, type Expense, type SimCard } from "@/lib/backend";
+import { expenseKindLabel, expenseTotal, isVoided } from "@/lib/expenseAccounting";
+import { normalizePeriodKey, periodLabel } from "@/lib/servicePeriod";
 import { filterSimCards, pickFirstOrNone } from "@/lib/simCardsUtils";
+import { ErrorBlock, LoadingBlock, EmptyBlock } from "@/components/QueryState";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
-import { useSearchParams } from "react-router-dom";
 
 const NONE = "__none";
 
@@ -52,17 +55,23 @@ const phoneVariants = (value: string) => {
 };
 
 const formSchema = z.object({
-  number: z.string().min(5, "Введите номер"),
+  number: z.string().min(2, "Введите номер или идентификатор подключения"),
   iccid: z.string().optional(),
   type: z.string().min(2, "Укажите тип"),
   status: z.enum(["active", "blocked"]),
   companyId: z.string().min(1, "Выберите компанию").refine((v) => v !== NONE, "Выберите компанию"),
   operatorId: z.string().min(1, "Выберите оператора").refine((v) => v !== NONE, "Выберите оператора"),
+  contractId: z.string().default(NONE),
   employeeId: z.string().default(NONE),
   tariffId: z.string().default(NONE),
+  connectionAddress: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Не удалось сохранить";
+}
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -76,20 +85,43 @@ const getStatusBadge = (status: string) => {
 };
 
 const SimCards = () => {
-  const { items: simCards, companies, operators, employees, tariffs, createSimCard, updateSimCard, deleteSimCard } =
+  const { items: simCards, companies, operators, employees, tariffs, isLoading, error, createSimCard, updateSimCard, assignSimCard, deleteSimCard } =
     useSimCards();
-  const { items: expenses } = useExpenses();
-  const [searchParams] = useSearchParams();
+  const { items: expenses } = useExpenses({includeVoided:true});
+  const { items: invoices } = useInvoices();
+  const { items: contracts } = useContracts();
+  const allEmployees = useEmployees();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = React.useState(false);
   const [editOpen, setEditOpen] = React.useState(false);
-  const [viewSim, setViewSim] = React.useState<SimCard | null>(null);
-  const [viewTariffId, setViewTariffId] = React.useState(NONE);
   const [editSim, setEditSim] = React.useState<SimCard | null>(null);
   const [search, setSearch] = React.useState(searchParams.get("q") ?? "");
   const [companyFilter, setCompanyFilter] = React.useState("all");
   const [operatorFilter, setOperatorFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [typeFilter, setTypeFilter] = React.useState("all");
+  const [viewTariffId, setViewTariffId] = React.useState(NONE);
+  const [historyPeriod, setHistoryPeriod] = React.useState("__all");
+
+  const idParam = searchParams.get("id");
+  const viewSim = simCards.find((s) => s.id === idParam) ?? null;
+  const { assignments: simAssignments, isLoading: assignmentsLoading } = useSimHistory(viewSim?.id);
+
+  const openCard = (id: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("id", id);
+      return next;
+    }, { replace: true });
+  };
+  const closeCard = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("id");
+      return next;
+    }, { replace: true });
+    setHistoryPeriod("__all");
+  };
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -116,34 +148,39 @@ const SimCards = () => {
 
   React.useEffect(() => {
     setSearch(searchParams.get("q") ?? "");
+    const presetCompany = searchParams.get("company");
+    if (presetCompany) setCompanyFilter(presetCompany);
   }, [searchParams]);
 
   const onSubmit = async (values: FormValues) => {
-    if (!values.companyId || values.companyId === NONE) {
-      toast({ title: "Выберите компанию", variant: "destructive" });
-      return;
+    try {
+      if (!values.companyId || values.companyId === NONE) {
+        throw new Error("Выберите компанию");
+      }
+      if (!values.operatorId || values.operatorId === NONE) {
+        throw new Error("Выберите оператора");
+      }
+      await createSimCard({
+        ...values,
+        contractId: values.contractId === NONE ? undefined : values.contractId,
+        employeeId: values.employeeId === NONE ? undefined : values.employeeId,
+        tariffId: values.tariffId === NONE ? undefined : values.tariffId,
+      });
+      toast({ title: "SIM-карта добавлена" });
+      setOpen(false);
+      form.reset({
+        number: "",
+        iccid: "",
+        type: "Голосовая",
+        status: "active",
+        companyId: pickFirstOrNone(companies, NONE),
+        operatorId: pickFirstOrNone(operators, NONE),
+        employeeId: NONE,
+        tariffId: NONE,
+      });
+    } catch (e) {
+      toast({ title: "Не сохранено", description: errorMessage(e), variant: "destructive" });
     }
-    if (!values.operatorId || values.operatorId === NONE) {
-      toast({ title: "Выберите оператора", variant: "destructive" });
-      return;
-    }
-    await createSimCard({
-      ...values,
-      employeeId: values.employeeId === NONE ? undefined : values.employeeId,
-      tariffId: values.tariffId === NONE ? undefined : values.tariffId,
-    });
-    toast({ title: "SIM-карта добавлена" });
-    setOpen(false);
-    form.reset({
-      number: "",
-      iccid: "",
-      type: "Голосовая",
-      status: "active",
-      companyId: pickFirstOrNone(companies, NONE),
-      operatorId: pickFirstOrNone(operators, NONE),
-      employeeId: NONE,
-      tariffId: NONE,
-    });
   };
 
   const editForm = useForm<FormValues>({
@@ -160,18 +197,50 @@ const SimCards = () => {
     },
   });
 
+  const openEdit = (sim: SimCard) => {
+    setEditSim(sim);
+    editForm.reset({
+      number: sim.number,
+      iccid: sim.iccid,
+      type: sim.type,
+      status: sim.status,
+      companyId: sim.companyId || companies[0]?.id || "",
+      operatorId: sim.operatorId || operators[0]?.id || "",
+      contractId: sim.contractId ?? NONE,
+      connectionAddress: sim.connectionAddress ?? "",
+      employeeId: sim.employeeId ?? NONE,
+      tariffId: sim.tariffId ?? NONE,
+    });
+    setEditOpen(true);
+  };
+
   const onEditSubmit = async (values: FormValues) => {
     if (!editSim) return;
-    await updateSimCard({
-      ...editSim,
-      ...values,
-      companyId: values.companyId,
-      operatorId: values.operatorId,
-      employeeId: values.employeeId === NONE ? undefined : values.employeeId,
-      tariffId: values.tariffId === NONE ? undefined : values.tariffId,
-    });
-    toast({ title: "SIM-карта обновлена" });
-    setEditOpen(false);
+    try {
+      await updateSimCard({
+        ...editSim,
+        ...values,
+        companyId: values.companyId,
+        operatorId: values.operatorId,
+        contractId: values.contractId === NONE ? undefined : values.contractId,
+        employeeId: values.employeeId === NONE ? undefined : values.employeeId,
+        tariffId: values.tariffId === NONE ? undefined : values.tariffId,
+      });
+      toast({ title: "SIM-карта обновлена" });
+      setEditOpen(false);
+    } catch (e) {
+      toast({ title: "Не сохранено", description: errorMessage(e), variant: "destructive" });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Удалить SIM-карту?")) return;
+    try {
+      await deleteSimCard(id);
+      toast({ title: "SIM-карта удалена" });
+    } catch (e) {
+      toast({ title: "Не удалено", description: errorMessage(e), variant: "destructive" });
+    }
   };
 
   const filteredSimCards = React.useMemo(
@@ -189,24 +258,51 @@ const SimCards = () => {
   const expenseTotalsByPhone = React.useMemo(() => {
     const totals = new Map<string, number>();
     expenses.forEach((expense) => {
+      if (isVoided(expense)) return;
       if (!expense.simNumber) return;
-      const key = canonicalPhone(expense.simNumber);
+      const key = `${expense.companyId}:${expense.contractId ?? ""}:${canonicalPhone(expense.simNumber)}`;
       if (!key) return;
-      totals.set(key, (totals.get(key) ?? 0) + expense.total);
+      totals.set(key, (totals.get(key) ?? 0) + expenseTotal(expense));
     });
     return totals;
   }, [expenses]);
 
+  // History for the card: allocations by simCardId/number plus direct numbered
+  // charges; parent charges are not added on top (no double count).
   const simExpenses = React.useMemo(() => {
     if (!viewSim) return [] as Expense[];
     const variants = phoneVariants(viewSim.number);
-    if (!variants.length) return [] as Expense[];
     return expenses.filter((expense) => {
-      if (!expense.simNumber) return false;
+      if (expense.simCardId && expense.simCardId === viewSim.id) return true;
+      if (expense.companyId !== viewSim.companyId || (expense.contractId && expense.contractId !== viewSim.contractId) || !expense.simNumber || !variants.length) return false;
       const expenseVariants = phoneVariants(expense.simNumber);
       return expenseVariants.some((variant) => variants.includes(variant));
     });
   }, [expenses, viewSim]);
+
+  const simHistoryPeriods = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const e of simExpenses) {
+      const k = e.periodKey?.trim() || normalizePeriodKey(e.month);
+      if (k) set.add(k);
+    }
+    return [...set].sort();
+  }, [simExpenses]);
+
+  const scopedSimExpenses = React.useMemo(() => {
+    if (historyPeriod === "__all") return simExpenses;
+    return simExpenses.filter((e) => (e.periodKey?.trim() || normalizePeriodKey(e.month)) === historyPeriod);
+  }, [simExpenses, historyPeriod]);
+
+  const simHistoryTotal = React.useMemo(
+    () => scopedSimExpenses.filter((e) => !isVoided(e)).reduce((s, e) => s + expenseTotal(e), 0),
+    [scopedSimExpenses],
+  );
+
+  const viewContract = viewSim?.contractId ? contracts.find((c) => c.id === viewSim.contractId) ?? null : null;
+  const viewEmployeeName = viewSim?.employeeId
+    ? employees.find((e) => e.id === viewSim.employeeId)?.name ?? viewSim.employee ?? "—"
+    : (viewSim?.employee || null);
 
   React.useEffect(() => {
     if (!viewSim) {
@@ -225,7 +321,6 @@ const SimCards = () => {
       tariffId,
       tariff: tariffId ? tariffName : "",
     };
-    setViewSim(updated);
     setViewTariffId(value);
     try {
       await updateSimCard(updated);
@@ -235,6 +330,11 @@ const SimCards = () => {
       toast({ title: message, variant: "destructive" });
     }
   };
+
+  const invoiceById = React.useMemo(() => {
+    const map = new Map(invoices.map((i) => [i.id, i]));
+    return (id?: string) => (id ? map.get(id) : undefined);
+  }, [invoices]);
 
   return (
     <MainLayout
@@ -248,7 +348,7 @@ const SimCards = () => {
               Добавить SIM
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Новая SIM-карта</DialogTitle>
               <DialogDescription>Добавьте номер и привяжите его к компании и оператору.</DialogDescription>
@@ -363,6 +463,8 @@ const SimCards = () => {
                     </FormItem>
                   )}
                 />
+                <FormField control={form.control} name="contractId" render={({field})=><FormItem><FormLabel>Договор</FormLabel><FormControl><select className="w-full rounded border bg-background p-2" {...field}><option value={NONE}>Не выбран</option>{contracts.filter(c=>c.companyId===form.watch("companyId")&&c.operatorId===form.watch("operatorId")).map(c=><option key={c.id} value={c.id}>{c.number}</option>)}</select></FormControl><FormMessage /></FormItem>} />
+<FormField control={form.control} name="connectionAddress" render={({field})=><FormItem><FormLabel>Адрес подключения</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
                 <FormField
                   control={form.control}
                   name="employeeId"
@@ -426,19 +528,20 @@ const SimCards = () => {
       }
     >
       {/* Filters */}
-      <div className="flex items-center gap-4 mb-6">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="relative flex-1 min-w-52 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Поиск по номеру, ICCID, оператору..."
+            aria-label="Поиск SIM-карт"
             className="pl-10"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        
+
         <Select value={companyFilter} onValueChange={setCompanyFilter}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-48" aria-label="Фильтр по компании">
             <SelectValue placeholder="Компания" />
           </SelectTrigger>
           <SelectContent>
@@ -452,7 +555,7 @@ const SimCards = () => {
         </Select>
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-40" aria-label="Фильтр по статусу">
             <SelectValue placeholder="Статус" />
           </SelectTrigger>
           <SelectContent>
@@ -463,7 +566,7 @@ const SimCards = () => {
         </Select>
 
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-40" aria-label="Фильтр по типу">
             <SelectValue placeholder="Тип" />
           </SelectTrigger>
           <SelectContent>
@@ -477,7 +580,7 @@ const SimCards = () => {
         </Select>
 
         <Select value={operatorFilter} onValueChange={setOperatorFilter}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-48" aria-label="Фильтр по оператору">
             <SelectValue placeholder="Оператор" />
           </SelectTrigger>
           <SelectContent>
@@ -489,15 +592,18 @@ const SimCards = () => {
             ))}
           </SelectContent>
         </Select>
-
-        <Button variant="outline" size="icon">
-          <Filter className="h-4 w-4" />
-        </Button>
       </div>
 
-      {/* Table */}
+      {isLoading ? (
+        <LoadingBlock text="Загрузка SIM-карт…" />
+      ) : error ? (
+        <ErrorBlock message={error} />
+      ) : filteredSimCards.length === 0 ? (
+        <EmptyBlock text="SIM-карты не найдены" />
+      ) : (
       <div className="stat-card p-0 overflow-hidden">
-        <table className="data-table">
+        <div className="overflow-x-auto">
+        <table className="data-table min-w-250">
           <thead>
             <tr>
               <th>Номер телефона</th>
@@ -508,19 +614,27 @@ const SimCards = () => {
               <th>Сотрудник</th>
               <th>Тариф</th>
               <th>Начисления</th>
-              <th className="w-12"></th>
+              <th className="w-12"><span className="sr-only">Действия</span></th>
             </tr>
           </thead>
           <tbody>
             {filteredSimCards.map((sim) => (
-              <tr key={sim.id} className="cursor-pointer" onClick={() => setViewSim(sim)}>
+              <tr key={sim.id} className="cursor-pointer" onClick={() => openCard(sim.id)}>
                 <td>
                   <div className="flex items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/10">
                       <Smartphone className="h-4 w-4 text-accent" />
                     </div>
                     <div>
-                      <p className="font-medium">{sim.number}</p>
+                      <p className="font-medium">
+                        <Link
+                          to={`/sim-cards?id=${encodeURIComponent(sim.id)}`}
+                          className="hover:underline focus-visible:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {sim.number}
+                        </Link>
+                      </p>
                       <p className="text-xs text-muted-foreground">{sim.iccid}</p>
                     </div>
                   </div>
@@ -540,7 +654,7 @@ const SimCards = () => {
                   <span className="text-muted-foreground">{sim.tariff}</span>
                 </td>
                 <td className="font-medium">
-                  {(expenseTotalsByPhone.get(canonicalPhone(sim.number)) ?? 0).toLocaleString("ru-RU")} RUB
+                  {(expenseTotalsByPhone.get(`${sim.companyId}:${sim.contractId ?? ""}:${canonicalPhone(sim.number)}`) ?? 0).toLocaleString("ru-RU")} ₽
                 </td>
                 <td>
                   <DropdownMenu>
@@ -549,48 +663,29 @@ const SimCards = () => {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
+                        aria-label={`Действия с номером ${sim.number}`}
                         onClick={(event) => event.stopPropagation()}
                       >
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => setViewSim(sim)}>
+                      <DropdownMenuItem onSelect={() => openCard(sim.id)}>
                         <Eye className="h-4 w-4 mr-2" />
                         Просмотр
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setEditSim(sim);
-                          editForm.reset({
-                            number: sim.number,
-                            iccid: sim.iccid,
-                            type: sim.type,
-                            status: sim.status,
-                            companyId: sim.companyId || companies[0]?.id || "",
-                            operatorId: sim.operatorId || operators[0]?.id || "",
-                            employeeId: sim.employeeId ?? NONE,
-                            tariffId: sim.tariffId ?? NONE,
-                          });
-                          setEditOpen(true);
-                        }}
-                      >
+                      <DropdownMenuItem onSelect={() => openEdit(sim)}>
                         <Pencil className="h-4 w-4 mr-2" />
                         Редактировать
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => openCard(sim.id)}>
                         <UserPlus className="h-4 w-4 mr-2" />
                         Назначить сотруднику
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
-                        onSelect={() => {
-                          if (window.confirm("Удалить SIM-карту?")) {
-                            deleteSimCard(sim.id);
-                            toast({ title: "SIM-карта удалена" });
-                          }
-                        }}
+                        onSelect={() => handleDelete(sim.id)}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Удалить
@@ -602,16 +697,20 @@ const SimCards = () => {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
+      )}
 
       {/* Просмотр */}
-      <Dialog open={!!viewSim} onOpenChange={(open) => !open && setViewSim(null)}>
-        <DialogContent className="max-w-4xl">
+      <Dialog open={idParam !== null} onOpenChange={(open) => !open && closeCard()}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Просмотр SIM-карты</DialogTitle>
-            <DialogDescription>Информация по SIM.</DialogDescription>
+            <DialogDescription>Номер, договор, ответственный и начисления.</DialogDescription>
           </DialogHeader>
-          {viewSim && (
+          {!viewSim ? (
+            <EmptyBlock text={isLoading ? "Загрузка…" : "SIM-карта не найдена"} />
+          ) : (
             <div className="space-y-6 text-sm">
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="flex justify-between">
@@ -639,14 +738,40 @@ const SimCards = () => {
                   <span className="font-medium">{viewSim.operator}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Сотрудник</span>
-                  <span className="font-medium">{viewSim.employee || "-"}</span>
+                  <span className="text-muted-foreground">Договор</span>
+                  <span className="font-medium">
+                    {viewSim.contractId && viewContract ? (
+                      <Link to={`/contracts?id=${encodeURIComponent(viewContract.id)}`} className="text-primary hover:underline">
+                        {viewContract.number}
+                      </Link>
+                    ) : (
+                      (viewSim.contractNumber || "—")
+                    )}
+                  </span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Сотрудник</span>
+                  <span className="font-medium">
+                    {viewSim.employeeId ? (
+                      <Link to={`/employees?id=${encodeURIComponent(viewSim.employeeId)}`} className="text-primary hover:underline">
+                        {viewEmployeeName}
+                      </Link>
+                    ) : (
+                      (viewEmployeeName || "—")
+                    )}
+                  </span>
+                </div>
+                {(viewSim.connectionAddress) && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Адрес подключения</span>
+                    <span className="font-medium">{viewSim.connectionAddress}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Тариф</span>
                   <span className="font-medium w-56">
                     <Select value={viewTariffId} onValueChange={handleViewTariffChange}>
-                      <SelectTrigger className="h-8">
+                      <SelectTrigger className="h-8" aria-label={`Тариф номера ${viewSim.number}`}>
                         <SelectValue placeholder="Без тарифа" />
                       </SelectTrigger>
                       <SelectContent>
@@ -663,32 +788,71 @@ const SimCards = () => {
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <label className="block text-sm">Текущий сотрудник
+                  <select className="block w-full rounded border bg-background p-2" value={viewSim.employeeId ?? NONE} onChange={async (e) => {
+                    try { await assignSimCard(viewSim.id, e.target.value === NONE ? null : e.target.value, viewSim.contractId); }
+                    catch (err) { toast({ title: "Назначение не сохранено", description: errorMessage(err), variant: "destructive" }); }
+                  }}>
+                    <option value={NONE}>Не назначен</option>
+                    {allEmployees.filter(e => e.companyId === viewSim.companyId && e.status === "active").map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  </select>
+                </label>
+                <h3 className="font-medium">История назначений</h3>
+                {assignmentsLoading ? <LoadingBlock /> : simAssignments.length ? simAssignments.map(a => <p key={a.id} className="text-sm">{allEmployees.find(e => e.id === a.employeeId)?.name ?? "Не назначен"} · {new Date(a.assignedAt).toLocaleDateString("ru-RU")} — {a.unassignedAt ? new Date(a.unassignedAt).toLocaleDateString("ru-RU") : "по настоящее время"}</p>) : <p className="text-sm text-muted-foreground">История назначений пока отсутствует.</p>}
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-medium">Начисления по номеру</div>
-                  <div className="text-xs text-muted-foreground">Строк: {simExpenses.length}</div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Строк: {scopedSimExpenses.length} · Итого: {simHistoryTotal.toLocaleString("ru-RU")} ₽</span>
+                    {simHistoryPeriods.length > 0 && (
+                      <Select value={historyPeriod} onValueChange={setHistoryPeriod}>
+                        <SelectTrigger className="h-8 w-44" aria-label="Период начислений">
+                          <SelectValue placeholder="Все периоды" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all">Все периоды</SelectItem>
+                          {simHistoryPeriods.map((k) => (
+                            <SelectItem key={k} value={k}>
+                              {periodLabel(k)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
                 </div>
-                {simExpenses.length ? (
+                {scopedSimExpenses.length ? (
                   <div className="max-h-72 overflow-auto rounded-md border border-border">
                     <table className="w-full text-sm">
                       <thead className="bg-muted/40 text-xs text-muted-foreground">
                         <tr>
                           <th className="px-3 py-2 text-left font-medium">Период</th>
+                          <th className="px-3 py-2 text-left font-medium">Вид</th>
                           <th className="px-3 py-2 text-left font-medium">Тип</th>
-                          <th className="px-3 py-2 text-left font-medium">Сумма</th>
-                          <th className="px-3 py-2 text-left font-medium">НДС</th>
-                          <th className="px-3 py-2 text-left font-medium">Итого</th>
+                          <th className="px-3 py-2 text-right font-medium">Итого</th>
+                          <th className="px-3 py-2 text-left font-medium">Документ</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {simExpenses.map((expense) => (
-                          <tr key={expense.id} className="border-t border-border">
-                            <td className="px-3 py-2">{expense.month}</td>
-                            <td className="px-3 py-2">{expense.type}</td>
-                            <td className="px-3 py-2">{expense.amount.toLocaleString("ru-RU")} ₽</td>
-                            <td className="px-3 py-2 text-muted-foreground">{expense.vat.toLocaleString("ru-RU")} ₽</td>
-                            <td className="px-3 py-2 font-medium">{expense.total.toLocaleString("ru-RU")} ₽</td>
-                          </tr>
-                        ))}
+                        {scopedSimExpenses.map((expense) => {
+                          const inv = invoiceById(expense.invoiceId);
+                          return (
+                            <tr key={expense.id} className="border-t border-border">
+                              <td className="px-3 py-2">{expense.periodKey || expense.month}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{expenseKindLabel(expense)}</td>
+                              <td className="px-3 py-2">{expense.serviceCategory || expense.type}</td>
+                              <td className="px-3 py-2 text-right font-medium">{expenseTotal(expense).toLocaleString("ru-RU")} ₽</td>
+                              <td className="px-3 py-2">
+                                {expense.invoiceId ? (
+                                  <Link to={`/invoices?id=${encodeURIComponent(expense.invoiceId)}`} className="text-primary hover:underline">
+                                    {inv ? inv.invoiceNo || "Счёт" : "Счёт"}
+                                  </Link>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -705,7 +869,7 @@ const SimCards = () => {
 
       {/* Редактирование */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Редактировать SIM</DialogTitle>
             <DialogDescription>Измените данные SIM-карты.</DialogDescription>
@@ -820,12 +984,14 @@ const SimCards = () => {
                   </FormItem>
                 )}
               />
+              <FormField control={editForm.control} name="contractId" render={({field})=><FormItem><FormLabel>Договор</FormLabel><FormControl><select className="w-full rounded border bg-background p-2" {...field}><option value={NONE}>Не выбран</option>{contracts.filter(c=>c.companyId===editForm.watch("companyId")&&c.operatorId===editForm.watch("operatorId")).map(c=><option key={c.id} value={c.id}>{c.number}</option>)}</select></FormControl><FormMessage /></FormItem>} />
+<FormField control={editForm.control} name="connectionAddress" render={({field})=><FormItem><FormLabel>Адрес подключения</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>} />
               <FormField
                 control={editForm.control}
                 name="employeeId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Сотрудник (опц.)</FormLabel>
+                    <FormLabel>Сотрудник (опц., «Не назначать» — снять)</FormLabel>
                     <FormControl>
                       <Select onValueChange={field.onChange} value={field.value || NONE}>
                         <SelectTrigger>

@@ -36,6 +36,10 @@ vi.mock("@/lib/backend", () => ({
   useCompanies: () => ({ items: [] }),
   useExpenses: () => ({ items: [] }),
   useEmployees: () => [],
+  useInvoices: () => ({items:[]}),
+  useEmployeeHistory: () => ({assignments:[],expenses:[],isLoading:false}),
+  useSimHistory: () => ({assignments:[],expenses:[],isLoading:false}),
+  useContractHistory: () => ({assignments:[],charges:[],invoices:[],simCards:[],isLoading:false}),
 }));
 
 import Contracts from "@/pages/Contracts";

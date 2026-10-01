@@ -1,4 +1,4 @@
-import type { Contract, Employee, SimCard } from "@/lib/backend";
+import type { Contract, Employee, Expense, SimCard } from "@/lib/backend";
 
 export type SearchQuery = {
   raw: string;
@@ -10,9 +10,9 @@ export type SearchResult = {
   id: string;
   label: string;
   sublabel: string;
-  path: "/contracts" | "/sim-cards" | "/employees";
+  path: "/contracts" | "/sim-cards" | "/employees" | "/expenses";
   query: string;
-  kind: "contract" | "sim" | "employee";
+  kind: "contract" | "sim" | "employee" | "expense";
 };
 
 export const buildSearchQuery = (input: string): SearchQuery => {
@@ -78,6 +78,30 @@ export const buildSimResults = (simCards: SimCard[], query: SearchQuery, limit =
       path: "/sim-cards",
       query: sim.number,
       kind: "sim",
+    }));
+};
+
+export const buildExpenseResults = (expenses: Expense[], query: SearchQuery, limit = 6): SearchResult[] => {
+  if (!hasText(query) && !hasDigits(query)) return [];
+  return expenses
+    .filter(
+      (expense) =>
+        matchesText(expense.contract || "", query) ||
+        matchesDigits(expense.contract || "", query) ||
+        matchesText(expense.simNumber || "", query) ||
+        matchesDigits(expense.simNumber || "", query) ||
+        matchesText(expense.company, query) ||
+        matchesText(expense.operator, query) ||
+        matchesText(expense.type, query),
+    )
+    .slice(0, limit)
+    .map((expense) => ({
+      id: expense.id,
+      label: expense.contract || expense.simNumber || expense.type,
+      sublabel: `${expense.company} · ${expense.month} · ${expense.total.toLocaleString("ru-RU")} ₽`,
+      path: "/expenses",
+      query: expense.contract || expense.simNumber || expense.type,
+      kind: "expense",
     }));
 };
 

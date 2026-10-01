@@ -1,20 +1,18 @@
 import type { ImportRow } from "./billingImportParser";
 
-type ParsedMeta = {
-  contractNumber: string;
-  periodStart: string;
-  periodEnd: string;
-  month: string;
-};
-
 
 
 function roundCurrency(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+function stripThousands(value: string): string {
+  return value.replace(/(\d)[\s\u00a0\u202f](?=\d)/g, "$1");
+}
+
 function extractAllNumbers(value: string): number[] {
-  const match = value.match(/-?\d+,\d{2}/g) ?? [];
+  const compact = stripThousands(value);
+  const match = compact.match(/-?\d+[,.]\d{2}/g) ?? [];
   return match.map((item) => Number(item.replace(/\s/g, "").replace(",", ".")) || 0);
 }
 
@@ -33,11 +31,11 @@ function normalizePhone(value: string): string {
 }
 
 function extractTariff(value: string): string {
+  const quoteMatch = value.match(/«([^»]+)»/);
+  if (quoteMatch) return quoteMatch[1].trim();
   const angle = value.match(/<([^>]+)>/);
   if (angle) return angle[1].trim();
-  const quote = value.match(/«([^»]+)»/);
-  if (quote) return quote[1].trim();
-  return value.replace(/Тарифный план на \d{2}\.\d{2}\.\d{4}/, "").trim();
+  return value.replace(/^Тарифный план на \d{2}\.\d{2}\.\d{4}/, "").trim();
 }
 
 function monthLabel(dateText: string): string {
@@ -46,67 +44,47 @@ function monthLabel(dateText: string): string {
   const monthIndex = Number(match[2]) - 1;
   const year = match[3];
   const monthName = [
-    "Январь",
-    "Февраль",
-    "Март",
-    "Апрель",
-    "Май",
-    "Июнь",
-    "Июль",
-    "Август",
-    "Сентябрь",
-    "Октябрь",
-    "Ноябрь",
-    "Декабрь",
+    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
   ][monthIndex];
   return monthName ? `${monthName} ${year}` : "текущий период";
 }
 
-function parseMeta(lines: string[]): ParsedMeta {
-  let contractNumber = "";
-  let periodStart = "";
-  let periodEnd = "";
-  for (const line of lines) {
-    const periodMatch = line.match(/(\d{2}\.\d{2}\.\d{4})\s*[-–]\s*(\d{2}\.\d{2}\.\d{4})/);
-    if (periodMatch) {
-      periodStart = periodMatch[1];
-      periodEnd = periodMatch[2];
-    }
-    const contractMatch = line.match(/Договор\s*№\s*([^\s]+)/i);
-    if (contractMatch) {
-      contractNumber = contractMatch[1];
+/**
+ * Client-extracted detail text (pdfjs in browser) -> ImportRow[].
+ * Same Megafon block structure as CSV/PDF parsers, but works on plain text
+ * lines so the unreliable in-action PDF path can be bypassed.
+ */
+export function parseMegafonDetailTextRows(
+  text: string,
+  meta: { contractNumber: string; periodStart: string; periodEnd: string },
+): ImportRow[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  let contractNumber = meta.contractNumber;
+  let periodStart = meta.periodStart;
+  let periodEnd = meta.periodEnd;
+  if (!contractNumber || !periodStart || !periodEnd) {
+    for (const line of lines) {
+      if (!periodStart || !periodEnd) {
+        const periodMatch = line.match(/(\d{2}\.\d{2}\.\d{4})\s*[–-]\s*(\d{2}\.\d{2}\.\d{4})/);
+        if (periodMatch) {
+          if (!periodStart) periodStart = periodMatch[1];
+          if (!periodEnd) periodEnd = periodMatch[2];
+        }
+      }
+      if (!contractNumber) {
+        const contractMatch = line.match(/Договор.*№\s*([^\s]+)\s*от/i) ?? line.match(/Договор\s*№\s*([^\s]+)/i);
+        if (contractMatch) contractNumber = contractMatch[1];
+      }
     }
   }
-  return { contractNumber, periodStart, periodEnd, month: monthLabel(periodEnd || periodStart) };
-}
-
-function normalizeLines(text: string): string[] {
-  return text
-    .replace(/\uFEFF/g, "")
-    .split(/\r?\n/)
-    .map((line) => line.replace(/"/g, "").replace(/;+/g, " ").replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-}
-
-function decodeCsv(data: ArrayBuffer): string {
-  const bytes = new Uint8Array(data);
-  const tryDecode = (label: string) => {
-    try {
-      return new TextDecoder(label, { fatal: false }).decode(bytes);
-    } catch {
-      return "";
-    }
-  };
-  return tryDecode("windows-1251") || tryDecode("utf-8") || "";
-}
-
-export function parseMegafonCsvRows(data: ArrayBuffer): ImportRow[] {
-  const text = decodeCsv(data);
-  const lines = normalizeLines(text);
+  const month = monthLabel(periodEnd || periodStart);
   const taxText=text;
   const taxRateMatch=taxText.match(/НДС[^\n\d]{0,8}(\d{1,2})\s*%/i);
   const vatRate=/без\s+НДС/i.test(taxText) ? 0 : taxRateMatch ? Number(taxRateMatch[1])/100 : undefined;
-  const meta = parseMeta(lines);
 
   const rows: ImportRow[] = [];
   let currentPhone = "";
@@ -117,20 +95,20 @@ export function parseMegafonCsvRows(data: ArrayBuffer): ImportRow[] {
 
   const flush = () => {
     if (!currentPhone) return;
-    const phone = normalizePhone(currentPhone);
-    if (!phone) return;
+    const normalizedPhone = normalizePhone(currentPhone);
+    if (!normalizedPhone) return;
     const total = currentTotal;
     const vat = currentVat ?? (vatRate !== undefined ? roundCurrency(total * (vatRate / (1 + vatRate))) : 0);
     const amount = roundCurrency(total - vat);
     if (total <= 0 && vat <= 0 && amount <= 0) return;
     rows.push({
       rowIndex: rows.length + 1,
-      phone: phone.length === 10 ? `7${phone}` : phone,
-      contractNumber: meta.contractNumber,
+      phone: normalizedPhone,
+      contractNumber,
       tariffName: currentTariff,
-      periodStart: meta.periodStart,
-      periodEnd: meta.periodEnd,
-      month: meta.month,
+      periodStart,
+      periodEnd,
+      month,
       amount,
       vat,
       total,
@@ -154,7 +132,7 @@ export function parseMegafonCsvRows(data: ArrayBuffer): ImportRow[] {
       currentTariff = extractTariff(line);
       continue;
     }
-    if (line.includes("Итого начислено")) {
+    if (line.includes("Итого") && line.includes("начислено")) {
       const numbers = extractAllNumbers(line);
       if (numbers.length) {
         currentTotal = numbers[numbers.length - 1];
@@ -173,6 +151,7 @@ export function parseMegafonCsvRows(data: ArrayBuffer): ImportRow[] {
     }
     if (line.includes("в том числе НДС")) {
       currentVat = extractNumber(line);
+      continue;
     }
     if (line.includes("не потреблялись")) {
       currentTotal = 0;
@@ -180,6 +159,5 @@ export function parseMegafonCsvRows(data: ArrayBuffer): ImportRow[] {
     }
   }
   flush();
-
   return rows;
 }
