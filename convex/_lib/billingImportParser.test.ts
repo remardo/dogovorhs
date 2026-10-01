@@ -1,21 +1,18 @@
+import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
-import * as XLSX from "xlsx";
 import { parseRows, phoneVariants } from "./billingImportParser";
 
-function buildWorkbook(rows: Record<string, unknown>[]): ArrayBuffer {
+async function buildWorkbook(rows: Record<string, unknown>[]): Promise<ArrayBuffer> {
   const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
-  const data = [headers, ...rows.map((row) => headers.map((key) => row[key] ?? null))];
-  const sheet = XLSX.utils.aoa_to_sheet(data);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, "Sheet1");
-  const bytes = XLSX.write(workbook, { type: "array", bookType: "xlsx" }) as
-    | ArrayBuffer
-    | Uint8Array;
-  const raw =
-    bytes instanceof ArrayBuffer
-      ? bytes
-      : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  return Uint8Array.from(new Uint8Array(raw)).buffer;
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Sheet1");
+  sheet.addRow(headers);
+  for (const row of rows) {
+    sheet.addRow(headers.map((key) => row[key] ?? null));
+  }
+  const buffer = await workbook.xlsx.writeBuffer();
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  return Uint8Array.from(bytes).buffer;
 }
 
 describe("phoneVariants", () => {
@@ -30,8 +27,8 @@ describe("phoneVariants", () => {
 });
 
 describe("parseRows", () => {
-  it("parses a valid row and derives totals/month", () => {
-    const data = buildWorkbook([
+  it("parses a valid row and derives totals/month", async () => {
+    const data = await buildWorkbook([
       {
         "Номер телефона": "7 (900) 123-45-67",
         "Договор": 123,
@@ -45,7 +42,7 @@ describe("parseRows", () => {
       },
     ]);
 
-    const [row] = parseRows(data);
+    const [row] = await parseRows(data);
     expect(row).toMatchObject({
       rowIndex: 1,
       phone: "79001234567",
@@ -63,8 +60,8 @@ describe("parseRows", () => {
     });
   });
 
-  it("uses total when provided and skips zero rows", () => {
-    const data = buildWorkbook([
+  it("uses total when provided and skips zero rows", async () => {
+    const data = await buildWorkbook([
       {
         "Номер телефона": "9001234567",
         "Договор": "A-1",
@@ -85,14 +82,14 @@ describe("parseRows", () => {
       },
     ]);
 
-    const rows = parseRows(data);
+    const rows = await parseRows(data);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.total).toBe(110);
     expect(rows[0]?.vatMismatch).toBe(false);
   });
 
-  it("marks VAT-only rows when phone is empty or zeros", () => {
-    const data = buildWorkbook([
+  it("marks VAT-only rows when phone is empty or zeros", async () => {
+    const data = await buildWorkbook([
       {
         "Номер телефона": "",
         "Договор": "A-1",
@@ -111,15 +108,15 @@ describe("parseRows", () => {
       },
     ]);
 
-    const rows = parseRows(data);
+    const rows = await parseRows(data);
     expect(rows[0]?.isVatOnly).toBe(true);
     expect(rows[1]?.isVatOnly).toBe(true);
     expect(rows[0]?.vatMismatch).toBe(false);
     expect(rows[1]?.vatMismatch).toBe(false);
   });
 
-  it("skips rows without contract number", () => {
-    const data = buildWorkbook([
+  it("skips rows without contract number", async () => {
+    const data = await buildWorkbook([
       {
         "Номер телефона": "79001234567",
         "Договор": "",
@@ -130,6 +127,6 @@ describe("parseRows", () => {
       },
     ]);
 
-    expect(parseRows(data)).toHaveLength(0);
+    expect(await parseRows(data)).toHaveLength(0);
   });
 });

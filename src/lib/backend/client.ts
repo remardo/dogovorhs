@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ConvexReactClient } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL;
 
@@ -48,7 +49,7 @@ export function useBackendHealth(): { status: BackendHealthStatus; error?: strin
     let cancelled = false;
     setState({ status: "checking" });
     convexClient
-      .query("health:ping", {})
+      .query(api.health.ping, {})
       .then(() => {
         if (!cancelled) setState({ status: "online" });
       })

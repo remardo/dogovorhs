@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "@/components/ui/sonner";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { api } from "../../../convex/_generated/api";
 import { backendAvailable, convexClient } from "./client";
+
+export type { Id };
+export { api, backendAvailable, convexClient };
 
 export type DashboardCompany = {
   id: string;
@@ -158,6 +162,51 @@ export type SimCard = {
   limit?: number;
 };
 
+// Формы отдают частично заполненные значения (zod валидирует обязательные
+// поля на уровне UI), поэтому входы create/update терпимы к undefined,
+// а нормализация до серверного контракта — в одном месте, здесь.
+export type CompanyInput = Partial<Pick<Company, "name" | "inn" | "kpp" | "comment">>;
+export type ContractInput = Partial<
+  Pick<
+    Contract,
+    "number" | "name" | "companyId" | "operatorId" | "type" | "status" | "startDate" | "endDate" | "monthlyFee" | "simCount"
+  >
+>;
+export type EmployeeInput = Partial<
+  Pick<Employee, "name" | "companyId" | "company" | "department" | "position" | "status" | "simCount" | "maxSim">
+>;
+export type OperatorInput = Partial<Pick<Operator, "name" | "type" | "manager" | "phone" | "email">>;
+export type TariffInput = Partial<
+  Pick<Tariff, "name" | "operatorId" | "type" | "monthlyFee" | "dataLimitGb" | "minutes" | "sms" | "status">
+>;
+export type ExpenseInput = Partial<
+  Pick<
+    Expense,
+    | "companyId"
+    | "contract"
+    | "operator"
+    | "month"
+    | "type"
+    | "amount"
+    | "vat"
+    | "total"
+    | "simNumber"
+    | "status"
+    | "hasDocument"
+  >
+>;
+export type SimCardInput = Partial<
+  Pick<
+    SimCard,
+    "number" | "iccid" | "type" | "status" | "companyId" | "operatorId" | "employeeId" | "tariffId" | "limit"
+  >
+>;
+
+export type QueryState = {
+  isLoading: boolean;
+  error: string | null;
+};
+
 const fallbackNotices = new Set<string>();
 
 function notifyFallbackOnce(key: string, title: string, description: string) {
@@ -171,6 +220,22 @@ function notifyBackendError() {
   notifyFallbackOnce("backend-offline", "Нет связи с бэкендом", "Данные недоступны. Проверьте подключение.");
 }
 
+function notifyValidation(message: string) {
+  toast(message);
+}
+
+function toOptional(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function requireClient(): boolean {
+  if (!convexClient || !backendAvailable) {
+    notifyBackendError();
+    return false;
+  }
+  return true;
+}
 
 const emptyDashboard: DashboardData = {
   summary: {
@@ -188,737 +253,543 @@ const emptyDashboard: DashboardData = {
   recentContracts: [],
 };
 
-export function useDashboardData(): DashboardData {
-  const [data, setData] = useState<DashboardData>(emptyDashboard);
+type Loader<T> = () => Promise<T>;
+
+function useConvexQuery<T>(empty: T, load: Loader<T>, options?: { pollMs?: number }): {
+  data: T;
+  isLoading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+} {
+  const [data, setData] = useState<T>(empty);
+  const [isLoading, setIsLoading] = useState(() => Boolean(convexClient));
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!convexClient) return;
+    setIsLoading(true);
+    try {
+      const res = await load();
+      setData(res ?? empty);
+      setError(null);
+    } catch (err) {
+      console.error("Failed to load backend data", err);
+      setData(empty);
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [empty, load]);
 
   useEffect(() => {
     if (!convexClient) {
+      setIsLoading(false);
       return;
     }
-
     let cancelled = false;
-
-    const fetchData = async () => {
-      try {
-        const res = (await convexClient.query("dashboard:getSummary", {})) as Partial<DashboardData> | null;
-        if (!cancelled && res) {
-          setData({
-            ...emptyDashboard,
-            ...res,
-            periods: res.periods ?? [],
-            months: res.months ?? [],
-            companies: res.companies ?? [],
-            expensesByMonth: res.expensesByMonth ?? [],
-            services: res.services ?? [],
-            recentContracts: res.recentContracts ?? [],
-            summary: { ...emptyDashboard.summary, ...(res.summary ?? {}) },
-          });
-        }
-      } catch (error) {
-        console.error("Failed to load dashboard data", error);
-        setData(emptyDashboard);
-      }
-    };
-
+    setIsLoading(true);
+    load()
+      .then((res) => {
+        if (cancelled) return;
+        setData(res ?? empty);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        console.error("Failed to load backend data", err);
+        setData(empty);
+        setError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    if (!options?.pollMs) {
+      return () => {
+        cancelled = true;
+      };
+    }
     const poll = () => {
       if (document.visibilityState !== "visible") return;
-      fetchData();
+      refresh();
     };
-
-    fetchData();
-    const interval = window.setInterval(poll, 30_000);
+    const interval = window.setInterval(poll, options.pollMs);
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        fetchData();
+        refresh();
       }
     };
-
     document.addEventListener("visibilitychange", handleVisibility);
-
     return () => {
       cancelled = true;
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, []);
+  }, [empty, load, options?.pollMs, refresh]);
 
-  return data;
+  return { data, isLoading, error, refresh };
+}
+
+async function mutateAndRefresh(mutation: () => Promise<unknown>, refresh: () => Promise<void>, label: string) {
+  if (!requireClient()) return;
+  try {
+    await mutation();
+    await refresh();
+  } catch (err) {
+    console.warn(`${label} failed`, err);
+    notifyBackendError();
+  }
+}
+
+export function useDashboardData(): DashboardData & QueryState & { refresh: () => Promise<void> } {
+  const { data, isLoading, error, refresh } = useConvexQuery(
+    emptyDashboard,
+    () => convexClient!.query(api.dashboard.getSummary, {}),
+    { pollMs: 30_000 },
+  );
+  return { ...data, isLoading, error, refresh };
 }
 
 export function useEmployees(): Employee[] {
-  const [data, setData] = useState<Employee[]>([]);
-
-  useEffect(() => {
-    if (!convexClient) {
-      return;
-    }
-
-    let cancelled = false;
-
-    convexClient
-      .query("employees:list", {})
-      .then((res) => {
-        if (!cancelled && res) {
-          setData(res as Employee[]);
-        }
-      })
-      .catch(() => {
-        setData([]);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return data;
+  const { items } = useEmployeesWithMutations();
+  return items;
 }
+
+function normalizeEmployeePayload(payload: EmployeeInput) {
+  const name = payload.name?.trim() ?? "";
+  const companyId = payload.companyId ?? "";
+  if (!name || !companyId) {
+    notifyValidation("Заполните ФИО и компанию");
+    return null;
+  }
+  return {
+    name,
+    companyId: companyId as Id<"companies">,
+    department: payload.department?.trim() ?? "",
+    position: payload.position?.trim() ?? "",
+    status: payload.status ?? "active",
+    simCount: payload.simCount ?? 0,
+    maxSim: payload.maxSim ?? 0,
+  };
+}
+
 // Extended hook with creation and company IDs
 export function useEmployeesWithMutations() {
-  const [data, setData] = useState<Employee[]>([]);
+  const { data, isLoading, error, refresh } = useConvexQuery<Employee[]>([], () =>
+    convexClient!.query(api.employees.list, {}),
+  );
 
-  useEffect(() => {
-    if (!convexClient) {
-      return;
-    }
-
-    let cancelled = false;
-
-    convexClient
-      .query("employees:list", {})
-      .then((res) => {
-        if (!cancelled && res) {
-          setData(res as Employee[]);
-        }
-      })
-      .catch(() => {
-        setData([]);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const createEmployee = async (payload: Omit<Employee, "id" | "company"> & { company: string }) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("employees:create", {
-        name: payload.name,
-        companyId: payload.companyId as Id<"companies">,
-        department: payload.department,
-        position: payload.position,
-        status: payload.status,
-        simCount: payload.simCount,
-        maxSim: payload.maxSim,
-      });
-      const res = await convexClient.query("employees:list", {});
-      setData(res as Employee[]);
-    } catch (err) {
-      console.warn("employees:create failed", err);
-      notifyBackendError();
-    }
+  const createEmployee = async (payload: EmployeeInput) => {
+    const normalized = normalizeEmployeePayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(
+      () => convexClient!.mutation(api.employees.create, normalized),
+      refresh,
+      "employees:create",
+    );
   };
 
   const updateEmployee = async (payload: Employee) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("employees:update", {
-        id: payload.id as Id<"employees">,
-        name: payload.name,
-        companyId: (payload.companyId || "") as Id<"companies">,
-        department: payload.department,
-        position: payload.position,
-        status: payload.status,
-        simCount: payload.simCount,
-        maxSim: payload.maxSim,
-      });
-      const res = await convexClient.query("employees:list", {});
-      setData(res as Employee[]);
-    } catch (err) {
-      console.warn("employees:update failed", err);
-      notifyBackendError();
-    }
+    const normalized = normalizeEmployeePayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(
+      () =>
+        convexClient!.mutation(api.employees.update, {
+          id: payload.id as Id<"employees">,
+          ...normalized,
+        }),
+      refresh,
+      "employees:update",
+    );
   };
 
   const deleteEmployee = async (id: string) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
+    if (!id) {
+      notifyValidation("Нет идентификатора сотрудника");
       return;
     }
-    try {
-      await convexClient.mutation("employees:remove", { id: id as Id<"employees"> });
-      const res = await convexClient.query("employees:list", {});
-      setData(res as Employee[]);
-    } catch (err) {
-      console.warn("employees:remove failed", err);
-      notifyBackendError();
-    }
+    await mutateAndRefresh(
+      () => convexClient!.mutation(api.employees.remove, { id: id as Id<"employees"> }),
+      refresh,
+      "employees:remove",
+    );
   };
 
-  return { items: data, createEmployee, updateEmployee, deleteEmployee };
+  return { items: data, isLoading, error, refresh, createEmployee, updateEmployee, deleteEmployee };
+}
+
+type ContractsData = {
+  items: Contract[];
+  companies: ContractOption[];
+  operators: ContractOption[];
+};
+
+const emptyContracts: ContractsData = { items: [], companies: [], operators: [] };
+
+function normalizeContractPayload(payload: ContractInput) {
+  const number = payload.number?.trim() ?? "";
+  const companyId = payload.companyId ?? "";
+  const operatorId = payload.operatorId ?? "";
+  if (!number || !companyId || !operatorId) {
+    notifyValidation("Заполните номер, компанию и оператора");
+    return null;
+  }
+  return {
+    number,
+    name: toOptional(payload.name),
+    companyId: companyId as Id<"companies">,
+    operatorId: operatorId as Id<"operators">,
+    type: payload.type?.trim() || "Мобильная связь",
+    status: payload.status ?? "active",
+    startDate: payload.startDate ?? "",
+    endDate: payload.endDate ?? "",
+    monthlyFee: payload.monthlyFee ?? 0,
+    simCount: payload.simCount ?? 0,
+  };
 }
 
 export function useContracts() {
-  const [data, setData] = useState<{
-    items: Contract[];
-    companies: ContractOption[];
-    operators: ContractOption[];
-  }>({
-    items: [],
-    companies: [],
-    operators: [],
-  });
+  const { data, isLoading, error, refresh } = useConvexQuery(emptyContracts, () =>
+    convexClient!.query(api.contracts.list, {}),
+  );
 
-  useEffect(() => {
-    if (!convexClient) {
-      return;
-    }
-    let cancelled = false;
-    convexClient
-      .query("contracts:list", {})
-      .then((res) => {
-        if (!cancelled && res) {
-          setData(res as typeof data);
-        }
-      })
-      .catch(() => {
-        setData({ items: [], companies: [], operators: [] });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const createContract = async (payload: Omit<Contract, "id" | "company" | "operator">) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("contracts:create", {
-        number: payload.number,
-        name: payload.name,
-        companyId: payload.companyId as Id<"companies">,
-        operatorId: payload.operatorId as Id<"operators">,
-        type: payload.type,
-        status: payload.status,
-        startDate: payload.startDate,
-        endDate: payload.endDate,
-        monthlyFee: payload.monthlyFee,
-        simCount: payload.simCount,
-      });
-      const res = await convexClient.query("contracts:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("contracts:create failed", err);
-      notifyBackendError();
-    }
+  const createContract = async (payload: ContractInput) => {
+    const normalized = normalizeContractPayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(() => convexClient!.mutation(api.contracts.create, normalized), refresh, "contracts:create");
   };
 
   const updateContract = async (payload: Contract) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("contracts:update", {
-        id: payload.id as Id<"contracts">,
-        number: payload.number,
-        name: payload.name,
-        companyId: payload.companyId as Id<"companies">,
-        operatorId: payload.operatorId as Id<"operators">,
-        type: payload.type,
-        status: payload.status,
-        startDate: payload.startDate,
-        endDate: payload.endDate,
-        monthlyFee: payload.monthlyFee,
-        simCount: payload.simCount,
-      });
-      const res = await convexClient.query("contracts:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("contracts:update failed", err);
-      notifyBackendError();
-    }
+    const normalized = normalizeContractPayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(
+      () =>
+        convexClient!.mutation(api.contracts.update, {
+          id: payload.id as Id<"contracts">,
+          ...normalized,
+        }),
+      refresh,
+      "contracts:update",
+    );
   };
 
   const deleteContract = async (id: string) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
+    if (!id) {
+      notifyValidation("Нет идентификатора договора");
       return;
     }
-
-    try {
-      await convexClient.mutation("contracts:remove", {
-        id: id as Id<"contracts">,
-      });
-      const res = await convexClient.query("contracts:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("contracts:remove failed", err);
-      notifyBackendError();
-    }
+    await mutateAndRefresh(
+      () =>
+        convexClient!.mutation(api.contracts.remove, {
+          id: id as Id<"contracts">,
+        }),
+      refresh,
+      "contracts:remove",
+    );
   };
 
-  return { ...data, createContract, updateContract, deleteContract };
+  return { ...data, isLoading, error, refresh, createContract, updateContract, deleteContract };
+}
+
+function normalizeOperatorPayload(payload: OperatorInput) {
+  const name = payload.name?.trim() ?? "";
+  if (!name) {
+    notifyValidation("Введите название оператора");
+    return null;
+  }
+  return {
+    name,
+    type: toOptional(payload.type),
+    manager: toOptional(payload.manager),
+    phone: toOptional(payload.phone),
+    email: toOptional(payload.email),
+  };
 }
 
 export function useOperators() {
-  const [items, setItems] = useState<Operator[]>([]);
+  const { data, isLoading, error, refresh } = useConvexQuery<Operator[]>([], () =>
+    convexClient!.query(api.operators.list, {}),
+  );
 
-  useEffect(() => {
-    if (!convexClient) {
-      return;
-    }
-    let cancelled = false;
-    convexClient
-      .query("operators:list", {})
-      .then((res) => {
-        if (!cancelled && res) {
-          setItems(res as Operator[]);
-        }
-      })
-      .catch(() => {
-        setItems([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const createOperator = async (payload: Omit<Operator, "id" | "contracts" | "simCards">) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("operators:create", {
-        name: payload.name,
-        type: payload.type,
-        manager: payload.manager,
-        phone: payload.phone,
-        email: payload.email,
-      });
-      const res = await convexClient.query("operators:list", {});
-      setItems(res as Operator[]);
-    } catch (err) {
-      console.warn("operators:create failed", err);
-      notifyBackendError();
-    }
+  const createOperator = async (payload: OperatorInput) => {
+    const normalized = normalizeOperatorPayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(() => convexClient!.mutation(api.operators.create, normalized), refresh, "operators:create");
   };
 
   const deleteOperator = async (id: string) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
+    if (!id) {
+      notifyValidation("Нет идентификатора оператора");
       return;
     }
-    try {
-      await convexClient.mutation("operators:remove", { id: id as Id<"operators"> });
-      const res = await convexClient.query("operators:list", {});
-      setItems(res as Operator[]);
-    } catch (err) {
-      console.warn("operators:remove failed", err);
-      notifyBackendError();
-    }
+    await mutateAndRefresh(
+      () => convexClient!.mutation(api.operators.remove, { id: id as Id<"operators"> }),
+      refresh,
+      "operators:remove",
+    );
   };
 
-  return { items, createOperator, deleteOperator };
+  return { items: data, isLoading, error, refresh, createOperator, deleteOperator };
+}
+
+function normalizeCompanyPayload(payload: CompanyInput) {
+  const name = payload.name?.trim() ?? "";
+  if (!name) {
+    notifyValidation("Введите название компании");
+    return null;
+  }
+  return {
+    name,
+    inn: toOptional(payload.inn),
+    kpp: toOptional(payload.kpp),
+    comment: toOptional(payload.comment),
+  };
 }
 
 export function useCompanies() {
-  const [items, setItems] = useState<Company[]>([]);
+  const { data, isLoading, error, refresh } = useConvexQuery<Company[]>([], () =>
+    convexClient!.query(api.companies.list, {}),
+  );
 
-  useEffect(() => {
-    if (!convexClient) {
-      return;
-    }
-    let cancelled = false;
-    convexClient
-      .query("companies:list", {})
-      .then((res) => {
-        if (!cancelled && res) {
-          setItems(res as Company[]);
-        }
-      })
-      .catch(() => {
-        setItems([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const createCompany = async (payload: Omit<Company, "id" | "contracts" | "simCards" | "employees" | "monthlyExpense">) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("companies:create", {
-        name: payload.name,
-        inn: payload.inn,
-        kpp: payload.kpp,
-        comment: payload.comment,
-      });
-      const res = await convexClient.query("companies:list", {});
-      setItems(res as Company[]);
-    } catch (err) {
-      console.warn("companies:create failed", err);
-      notifyBackendError();
-    }
+  const createCompany = async (payload: CompanyInput) => {
+    const normalized = normalizeCompanyPayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(() => convexClient!.mutation(api.companies.create, normalized), refresh, "companies:create");
   };
 
   const deleteCompany = async (id: string) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
+    if (!id) {
+      notifyValidation("Нет идентификатора компании");
       return;
     }
-    try {
-      await convexClient.mutation("companies:remove", { id: id as Id<"companies"> });
-      const res = await convexClient.query("companies:list", {});
-      setItems(res as Company[]);
-    } catch (err) {
-      console.warn("companies:remove failed", err);
-      notifyBackendError();
-    }
+    await mutateAndRefresh(
+      () => convexClient!.mutation(api.companies.remove, { id: id as Id<"companies"> }),
+      refresh,
+      "companies:remove",
+    );
   };
 
-  return { items, createCompany, deleteCompany };
+  return { items: data, isLoading, error, refresh, createCompany, deleteCompany };
+}
+
+type TariffsData = {
+  items: Tariff[];
+  operators: ContractOption[];
+};
+
+const emptyTariffs: TariffsData = { items: [], operators: [] };
+
+function normalizeTariffPayload(payload: TariffInput) {
+  const name = payload.name?.trim() ?? "";
+  const operatorId = payload.operatorId ?? "";
+  if (!name || !operatorId) {
+    notifyValidation("Заполните название тарифа и оператора");
+    return null;
+  }
+  return {
+    name,
+    operatorId: operatorId as Id<"operators">,
+    monthlyFee: payload.monthlyFee ?? 0,
+    dataLimitGb: payload.dataLimitGb ?? undefined,
+    minutes: payload.minutes ?? undefined,
+    sms: payload.sms ?? undefined,
+    status: payload.status ?? "active",
+  };
 }
 
 export function useTariffs() {
-  const [data, setData] = useState<{
-    items: Tariff[];
-    operators: ContractOption[];
-  }>({
-    items: [],
-    operators: [],
-  });
+  const { data, isLoading, error, refresh } = useConvexQuery(emptyTariffs, () =>
+    convexClient!.query(api.tariffs.list, {}),
+  );
 
-  useEffect(() => {
-    if (!convexClient) {
-      return;
-    }
-    let cancelled = false;
-    convexClient
-      .query("tariffs:list", {})
-      .then((res) => {
-        if (!cancelled && res) {
-          setData(res as typeof data);
-        }
-      })
-      .catch(() => {
-        setData({ items: [], operators: [] });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const createTariff = async (payload: Omit<Tariff, "id" | "operator">) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("tariffs:create", {
-        name: payload.name,
-        operatorId: payload.operatorId as Id<"operators">,
-        monthlyFee: payload.monthlyFee,
-        dataLimitGb: payload.dataLimitGb ?? undefined,
-        minutes: payload.minutes ?? undefined,
-        sms: payload.sms ?? undefined,
-        status: payload.status,
-      });
-      const res = await convexClient.query("tariffs:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("tariffs:create failed", err);
-      notifyBackendError();
-    }
+  const createTariff = async (payload: TariffInput) => {
+    const normalized = normalizeTariffPayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(() => convexClient!.mutation(api.tariffs.create, normalized), refresh, "tariffs:create");
   };
 
   const updateTariff = async (payload: Tariff) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("tariffs:update", {
-        id: payload.id as Id<"tariffs">,
-        name: payload.name,
-        operatorId: payload.operatorId as Id<"operators">,
-        monthlyFee: payload.monthlyFee,
-        dataLimitGb: payload.dataLimitGb ?? undefined,
-        minutes: payload.minutes ?? undefined,
-        sms: payload.sms ?? undefined,
-        status: payload.status,
-      });
-      const res = await convexClient.query("tariffs:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("tariffs:update failed", err);
-      notifyBackendError();
-    }
+    const normalized = normalizeTariffPayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(
+      () =>
+        convexClient!.mutation(api.tariffs.update, {
+          id: payload.id as Id<"tariffs">,
+          ...normalized,
+        }),
+      refresh,
+      "tariffs:update",
+    );
   };
 
   const deleteTariff = async (id: string) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
+    if (!id) {
+      notifyValidation("Нет идентификатора тарифа");
       return;
     }
-    try {
-      await convexClient.mutation("tariffs:remove", { id: id as Id<"tariffs"> });
-      const res = await convexClient.query("tariffs:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("tariffs:remove failed", err);
-      notifyBackendError();
-    }
+    await mutateAndRefresh(
+      () => convexClient!.mutation(api.tariffs.remove, { id: id as Id<"tariffs"> }),
+      refresh,
+      "tariffs:remove",
+    );
   };
 
-  return { ...data, createTariff, updateTariff, deleteTariff };
+  return { ...data, isLoading, error, refresh, createTariff, updateTariff, deleteTariff };
+}
+
+type ExpensesData = {
+  items: Expense[];
+  companies: ContractOption[];
+  summary: { total: number; confirmed: number; draft: number; noDocs: number };
+};
+
+const emptyExpenses: ExpensesData = {
+  items: [],
+  companies: [],
+  summary: { total: 0, confirmed: 0, draft: 0, noDocs: 0 },
+};
+
+function normalizeExpensePayload(payload: ExpenseInput) {
+  const companyId = payload.companyId ?? "";
+  const month = payload.month?.trim() ?? "";
+  const type = payload.type?.trim() ?? "";
+  if (!companyId || !month || !type) {
+    notifyValidation("Заполните компанию, период и тип расхода");
+    return null;
+  }
+  const amount = payload.amount ?? 0;
+  const vat = payload.vat ?? 0;
+  return {
+    companyId: companyId as Id<"companies">,
+    contract: toOptional(payload.contract),
+    operator: toOptional(payload.operator),
+    month,
+    type,
+    amount,
+    vat,
+    total: payload.total ?? amount + vat,
+    simNumber: toOptional(payload.simNumber),
+    status: payload.status ?? "draft",
+    hasDocument: payload.hasDocument ?? false,
+  };
 }
 
 export function useExpenses() {
-  const [data, setData] = useState<{ items: Expense[]; companies: ContractOption[]; summary: { total: number; confirmed: number; draft: number; noDocs: number } }>({
-    items: [],
-    companies: [],
-    summary: {
-      total: 0,
-      confirmed: 0,
-      draft: 0,
-      noDocs: 0,
-    },
-  });
+  const { data, isLoading, error, refresh } = useConvexQuery(emptyExpenses, () =>
+    convexClient!.query(api.expenses.list, {}),
+  );
 
-  useEffect(() => {
-    if (!convexClient) return;
-    let cancelled = false;
-    convexClient
-      .query("expenses:list", {})
-      .then((res) => {
-        if (!cancelled && res) setData(res as typeof data);
-      })
-      .catch(() => {
-        setData({
-          items: [],
-          companies: [],
-          summary: { total: 0, confirmed: 0, draft: 0, noDocs: 0 },
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const refreshExpenses = refresh;
 
-  const refreshExpenses = async () => {
-    if (!convexClient || !backendAvailable) return;
-    try {
-      const res = await convexClient.query("expenses:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("expenses:list refresh failed", err);
-      notifyBackendError();
-    }
-  };
-
-  const createExpense = async (payload: Omit<Expense, "id" | "company" | "total"> & { total?: number }) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("expenses:create", {
-        companyId: payload.companyId as Id<"companies">,
-        contract: payload.contract,
-        operator: payload.operator,
-        month: payload.month,
-        type: payload.type,
-        amount: payload.amount,
-        vat: payload.vat,
-        total: payload.total ?? payload.amount + payload.vat,
-        simNumber: payload.simNumber,
-        status: payload.status,
-        hasDocument: payload.hasDocument,
-      });
-      const res = await convexClient.query("expenses:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("expenses:create failed", err);
-      notifyBackendError();
-    }
+  const createExpense = async (payload: ExpenseInput) => {
+    const normalized = normalizeExpensePayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(() => convexClient!.mutation(api.expenses.create, normalized), refresh, "expenses:create");
   };
 
   const updateExpense = async (payload: Expense) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("expenses:update", {
-        id: payload.id as Id<"expenses">,
-        companyId: payload.companyId as Id<"companies">,
-        contract: payload.contract,
-        operator: payload.operator,
-        month: payload.month,
-        type: payload.type,
-        amount: payload.amount,
-        vat: payload.vat,
-        total: payload.total,
-        simNumber: payload.simNumber,
-        status: payload.status,
-        hasDocument: payload.hasDocument,
-      });
-      const res = await convexClient.query("expenses:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("expenses:update failed", err);
-      notifyBackendError();
-    }
+    const normalized = normalizeExpensePayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(
+      () =>
+        convexClient!.mutation(api.expenses.update, {
+          id: payload.id as Id<"expenses">,
+          ...normalized,
+        }),
+      refresh,
+      "expenses:update",
+    );
   };
 
   const deleteExpense = async (id: string) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
+    if (!id) {
+      notifyValidation("Нет идентификатора расхода");
       return;
     }
-
-    try {
-      await convexClient.mutation("expenses:remove", { id: id as Id<"expenses"> });
-      const res = await convexClient.query("expenses:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("expenses:remove failed", err);
-      notifyBackendError();
-    }
+    await mutateAndRefresh(
+      () => convexClient!.mutation(api.expenses.remove, { id: id as Id<"expenses"> }),
+      refresh,
+      "expenses:remove",
+    );
   };
 
-  return { ...data, refreshExpenses, createExpense, updateExpense, deleteExpense };
+  return { ...data, isLoading, error, refreshExpenses, refresh, createExpense, updateExpense, deleteExpense };
+}
+
+type SimCardsData = {
+  items: SimCard[];
+  companies: ContractOption[];
+  operators: ContractOption[];
+  employees: ContractOption[];
+  tariffs: ContractOption[];
+};
+
+const emptySimCards: SimCardsData = { items: [], companies: [], operators: [], employees: [], tariffs: [] };
+
+const NONE_OPTION = "__none";
+
+function normalizeSimCardPayload(payload: SimCardInput) {
+  const number = payload.number?.trim() ?? "";
+  const companyId = payload.companyId && payload.companyId !== NONE_OPTION ? payload.companyId : "";
+  const operatorId = payload.operatorId && payload.operatorId !== NONE_OPTION ? payload.operatorId : "";
+  if (!number || !companyId || !operatorId) {
+    notifyValidation("Заполните номер, компанию и оператора");
+    return null;
+  }
+  const employeeId =
+    payload.employeeId && payload.employeeId !== NONE_OPTION
+      ? (payload.employeeId as Id<"employees">)
+      : undefined;
+  const tariffId =
+    payload.tariffId && payload.tariffId !== NONE_OPTION ? (payload.tariffId as Id<"tariffs">) : undefined;
+  return {
+    number,
+    iccid: toOptional(payload.iccid),
+    type: toOptional(payload.type),
+    companyId: companyId as Id<"companies">,
+    operatorId: operatorId as Id<"operators">,
+    employeeId,
+    tariffId,
+    status: payload.status ?? "active",
+    limit: payload.limit,
+  };
 }
 
 export function useSimCards() {
-  const [data, setData] = useState<{
-    items: SimCard[];
-    companies: ContractOption[];
-    operators: ContractOption[];
-    employees: ContractOption[];
-    tariffs: ContractOption[];
-  }>({
-    items: [],
-    companies: [],
-    operators: [],
-    employees: [],
-    tariffs: [],
-  });
+  const { data, isLoading, error, refresh } = useConvexQuery(emptySimCards, () =>
+    convexClient!.query(api.simCards.list, {}),
+  );
 
-  useEffect(() => {
-    if (!convexClient) return;
-    let cancelled = false;
-    convexClient
-      .query("simCards:list", {})
-      .then((res) => {
-        if (!cancelled && res) setData(res as typeof data);
-      })
-      .catch(() => {
-        setData({
-          items: [],
-          companies: [],
-          operators: [],
-          employees: [],
-          tariffs: [],
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const createSimCard = async (payload: Omit<SimCard, "id" | "company" | "operator" | "employee" | "tariff">) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("simCards:create", {
-        number: payload.number,
-        iccid: payload.iccid,
-        type: payload.type,
-        companyId: payload.companyId as Id<"companies">,
-        operatorId: payload.operatorId as Id<"operators">,
-        employeeId: payload.employeeId ? (payload.employeeId as Id<"employees">) : undefined,
-        tariffId: payload.tariffId ? (payload.tariffId as Id<"tariffs">) : undefined,
-        status: payload.status,
-        limit: payload.limit,
-      });
-      const res = await convexClient.query("simCards:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("simCards:create failed", err);
-      notifyBackendError();
-    }
+  const createSimCard = async (payload: SimCardInput) => {
+    const normalized = normalizeSimCardPayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(() => convexClient!.mutation(api.simCards.create, normalized), refresh, "simCards:create");
   };
 
   const updateSimCard = async (payload: SimCard) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
-      return;
-    }
-
-    try {
-      await convexClient.mutation("simCards:update", {
-        id: payload.id as Id<"simCards">,
-        number: payload.number,
-        iccid: payload.iccid,
-        type: payload.type,
-        companyId: payload.companyId as Id<"companies">,
-        operatorId: payload.operatorId as Id<"operators">,
-        employeeId: payload.employeeId ? (payload.employeeId as Id<"employees">) : undefined,
-        tariffId: payload.tariffId ? (payload.tariffId as Id<"tariffs">) : undefined,
-        status: payload.status,
-        limit: payload.limit,
-      });
-      const res = await convexClient.query("simCards:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("simCards:update failed", err);
-      notifyBackendError();
-    }
+    const normalized = normalizeSimCardPayload(payload);
+    if (!normalized) return;
+    await mutateAndRefresh(
+      () =>
+        convexClient!.mutation(api.simCards.update, {
+          id: payload.id as Id<"simCards">,
+          ...normalized,
+        }),
+      refresh,
+      "simCards:update",
+    );
   };
 
   const deleteSimCard = async (id: string) => {
-    if (!convexClient || !backendAvailable) {
-      notifyBackendError();
+    if (!id) {
+      notifyValidation("Нет идентификатора SIM-карты");
       return;
     }
-    try {
-      await convexClient.mutation("simCards:remove", { id: id as Id<"simCards"> });
-      const res = await convexClient.query("simCards:list", {});
-      setData(res as typeof data);
-    } catch (err) {
-      console.warn("simCards:remove failed", err);
-      notifyBackendError();
-    }
+    await mutateAndRefresh(
+      () => convexClient!.mutation(api.simCards.remove, { id: id as Id<"simCards"> }),
+      refresh,
+      "simCards:remove",
+    );
   };
 
-  return { ...data, createSimCard, updateSimCard, deleteSimCard };
+  return { ...data, isLoading, error, refresh, createSimCard, updateSimCard, deleteSimCard };
 }

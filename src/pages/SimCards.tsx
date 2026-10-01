@@ -128,14 +128,7 @@ const SimCards = () => {
       return;
     }
     await createSimCard({
-      id: "",
-      company: "",
-      operator: "",
-      employee: "",
-      tariff: "",
       ...values,
-      companyId: values.companyId,
-      operatorId: values.operatorId,
       employeeId: values.employeeId === NONE ? undefined : values.employeeId,
       tariffId: values.tariffId === NONE ? undefined : values.tariffId,
     });

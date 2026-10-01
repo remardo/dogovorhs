@@ -80,15 +80,7 @@ const Tariffs = () => {
   }, [form, operators]);
 
   const onSubmit = async (values: FormValues) => {
-    await createTariff({
-      id: "",
-      operator: "",
-      simCount: 0,
-      ...values,
-      dataLimitGb: values.dataLimitGb ?? null,
-      minutes: values.minutes ?? null,
-      sms: values.sms ?? null,
-    });
+    await createTariff(values);
     toast({ title: "Тариф добавлен" });
     setOpen(false);
     form.reset({
@@ -234,7 +226,7 @@ const Tariffs = () => {
                     <FormItem>
                       <FormLabel>Интернет, ГБ (пусто — нет)</FormLabel>
                       <FormControl>
-                        <Input placeholder="Напр. 30" {...field} />
+                        <Input placeholder="Напр. 30" {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -247,7 +239,7 @@ const Tariffs = () => {
                     <FormItem>
                       <FormLabel>Минуты (пусто — нет)</FormLabel>
                       <FormControl>
-                        <Input placeholder="Напр. 500" {...field} />
+                        <Input placeholder="Напр. 500" {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -260,7 +252,7 @@ const Tariffs = () => {
                     <FormItem>
                       <FormLabel>SMS (пусто — нет)</FormLabel>
                       <FormControl>
-                        <Input placeholder="Напр. 100" {...field} />
+                        <Input placeholder="Напр. 100" {...field} value={field.value ?? ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -507,7 +499,7 @@ const Tariffs = () => {
                   <FormItem>
                     <FormLabel>Интернет, ГБ (пусто - нет)</FormLabel>
                     <FormControl>
-                      <Input placeholder="Напр. 30" {...field} />
+                      <Input placeholder="Напр. 30" {...field} value={field.value ?? ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -520,7 +512,7 @@ const Tariffs = () => {
                   <FormItem>
                     <FormLabel>Минуты (пусто - нет)</FormLabel>
                     <FormControl>
-                      <Input placeholder="Напр. 500" {...field} />
+                      <Input placeholder="Напр. 500" {...field} value={field.value ?? ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -533,7 +525,7 @@ const Tariffs = () => {
                   <FormItem>
                     <FormLabel>SMS (пусто - нет)</FormLabel>
                     <FormControl>
-                      <Input placeholder="Напр. 100" {...field} />
+                      <Input placeholder="Напр. 100" {...field} value={field.value ?? ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

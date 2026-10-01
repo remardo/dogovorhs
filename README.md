@@ -1,95 +1,60 @@
-# Welcome to your Lovable project
+# Договор HS — учёт договоров связи
 
-## Project info
+Внутренний сервис для учёта договоров связи, SIM-карт, сотрудников, тарифов и расходов на телекоммуникации.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Стек
 
-## How can I edit this code?
+- Vite + TypeScript (strict) + React 18 + React Router
+- shadcn-ui + Tailwind CSS
+- Convex (бэкенд: компании, сотрудники, договоры, SIM, тарифы, расходы, импорт биллинга)
+- Vitest + Testing Library, ESLint, Husky (pre-commit: lint + typecheck + test)
 
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Быстрый старт
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+npm ci
+npm run convex:dev   # в одном терминале (нужен вход в Convex CLI)
+npm run dev          # в другом: http://localhost:8080
 ```
 
-**Edit a file directly in GitHub**
+Без `VITE_CONVEX_URL` фронтенд работает в демо-режиме (пустые данные + баннер), при появлении URL переключается на Convex.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Переменные окружения
 
-**Use GitHub Codespaces**
+Пример — в `.env.example` (закоммичен, секретов не содержит):
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- `VITE_CONVEX_URL` — публичный URL Convex (читается на этапе сборки Vite).
+- `CONVEX_DEPLOYMENT` — только локально для `npx convex dev`.
+- `CONVEX_SELF_HOSTED_URL` / `CONVEX_SELF_HOSTED_ADMIN_KEY` — только для `convex deploy`, хранить в секретах, не коммитить.
+- `REQUIRE_AUTH` — `true` включает обязательную авторизацию на сервере (`convex/_lib/flags.ts`).
 
-## What technologies are used for this project?
+## Скрипты
 
-This project is built with:
+- `npm run dev` — dev-сервер
+- `npm run build` — `typecheck + vite build`
+- `npm run typecheck` — `tsc -b` (фронт) + `tsc -p convex` (бэкенд)
+- `npm run lint` — eslint
+- `npm test` — vitest (26 тестов: парсинг биллинга, НДС, поиск, query-параметры)
+- `npm run convex:dev` / `npm run convex:deploy` — Convex CLI
+- Сидирование (однократно): `npx convex run seed:run`
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Архитектура фронта
 
-## How can I deploy this project?
+- `src/lib/backend/client.ts` — `convexClient` (null в демо-режиме), `backendAvailable`, `useBackendHealth`, реэкспорт типизированного `api`.
+- `src/lib/backend/index.ts` — типизированные хуки (`api.*`, без строковых имён функций), терпимые `*Input` типы с нормализацией до серверного контракта, `isLoading`/`error`/`refresh` в каждом хуке. Дашборд опрашивается раз в 30с на видимой вкладке.
+- `src/components/expenses/BillingImportDialog.tsx` — импорт биллинга (загрузка, предпросмотр, разрешение договоров/SIM/тарифов, применение). Типы — в `importTypes.ts`.
+- `src/pages/Expenses.tsx` — только CRUD расходов и таблица.
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Импорт биллинга
 
-## Can I connect a custom domain to my Lovable project?
+Парсинг XLS/XLSX — `exceljs` (`convex/_lib/billingImportParser.ts`), CSV/PDF Мегафон — отдельные модули. `xlsx` удалён осознанно (заброшенная библиотека с известными уязвимостями).
 
-Yes, you can!
+## Деплой
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+См. `DEPLOY_COOLIFY.md`: фронт собирается Dockerfile'ом (build-arg `VITE_CONVEX_URL`), Convex — отдельным self-hosted сервисом.
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Безопасность
 
-## Backend (Convex)
-
-В проект добавлен Convex для хранения данных (компании, сотрудники, договоры, расходы).
-
-1. Установите переменную окружения `VITE_CONVEX_URL` (из вашего Convex проекта).
-2. Запустите Convex локально: `npm run convex:dev` (требуется вход в Convex CLI).
-3. Однократно прогоните сидирование: `npx convex run seed:run`.
-4. Стартуйте фронтенд: `npm run dev -- --host --port 5173`.
-
-Если `VITE_CONVEX_URL` не задан, фронтенд покажет демо-данные, но будет готов переключиться на Convex при появлении URL.
-
-### Авторизация (заготовка)
-
-В проект добавлены заготовки для включения авторизации в Convex:
-
-- клиентские методы `initBackendAuthFromStorage` и `setBackendAuthToken` в `src/lib/backend/client.ts`;
-- серверный helper `requireUserIdentity` в `convex/_lib/auth.ts` (можно подключать в queries/mutations, когда появится провайдер auth).
-
-#### Принудительная авторизация (опционально)
-
-Если задать переменную окружения Convex `REQUIRE_AUTH=true`, то все основные queries/mutations (кроме `health:ping`) будут требовать авторизацию (`Требуется авторизация`).
+- Никогда не коммитить `.env.local` / `.env.coolify` (там admin-ключи) — они в `.gitignore`.
+- Для продакшена выставить `REQUIRE_AUTH=true` на Convex-сервисе.
+- `npm audit`: фиксы без breaking changes применены (react-router XSS закрыт). Остались dev-only предупреждения по `vite/vitest/esbuild` — лечатся только мажорным апгрейдом (vite 8 / vitest 5), отложено сознательно.

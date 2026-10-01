@@ -7,6 +7,7 @@ import { parseRows, phoneVariants } from "./_lib/billingImportParser";
 import { parseMegafonPdfRows } from "./_lib/billingImportPdfMegafon";
 import { parseMegafonCsvRows } from "./_lib/billingImportCsvMegafon";
 import { applyVatDistribution, vatGroupKey } from "./_lib/vatDistribution";
+import type { CompanyConflict } from "./_lib/billingImportLogic";
 import type { Id } from "./_generated/dataModel";
 import { api } from "./_generated/api";
 
@@ -79,7 +80,12 @@ type PreviewResponse = {
   missingTariffs: { operatorId: string; operatorName: string; contractNumber: string; tariffName: string }[];
 };
 
-type ApplyResult = { ok: boolean; status: string; missingContracts?: string[] };
+type ApplyResult = {
+  ok: boolean;
+  status: string;
+  missingContracts?: string[];
+  companyConflicts?: CompanyConflict<string>[];
+};
 
 export const preview = action({
   args: { id: v.id("billingImports") },

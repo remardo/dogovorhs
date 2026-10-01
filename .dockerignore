@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.git/
+convex/_generated/
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+*.xls
+*.xlsx
+*.csv
+*.pdf
+Screenshot_*.jpg
+Screenshot_*.png
+.vscode/
+.idea/

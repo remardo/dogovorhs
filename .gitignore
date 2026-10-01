@@ -20,12 +20,18 @@ node_modules/
 dist/
 dist-ssr/
 coverage/
+*.tsbuildinfo
 
 # Local reports
 *.xls
 *.xlsx
 *.csv
 *.pdf
+
+# Local screenshots / dumps
+Screenshot_*.jpg
+Screenshot_*.png
+screenshot_*.png
 
 # Convex
 convex/_generated/
