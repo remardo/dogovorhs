@@ -23,6 +23,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { useCompanies, useContracts, useExpenses, useInvoices, useOperators, type Expense } from "@/lib/backend";
 import BillingImportDialog from "@/components/expenses/BillingImportDialog";
+import { LoadingBlock } from "@/components/QueryState";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -48,7 +49,7 @@ const Expenses = () => {
   const [params, setParams] = useSearchParams();
   const { items: invoices } = useInvoices();
   const [kindFilter, setKindFilter] = React.useState("charge");
-  const { items: expenses, refreshExpenses, createExpense, updateExpense, voidExpense } = useExpenses({includeVoided:true});
+  const { items: expenses, isLoading: expensesLoading, refreshExpenses, createExpense, updateExpense, voidExpense } = useExpenses({includeVoided:true});
   const { items: companies } = useCompanies();
   const { items: contracts } = useContracts();
   const { items: operators } = useOperators();
@@ -482,6 +483,10 @@ const Expenses = () => {
 
       </div>
 
+      {expensesLoading ? (
+        <LoadingBlock text="Загрузка расходов…" />
+      ) : (
+      <>
       {/* Summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="stat-card">
@@ -561,8 +566,9 @@ const Expenses = () => {
                         className="text-destructive focus:text-destructive"
                         onSelect={() => {
                           if (window.confirm("Аннулировать расход? История и оригинал сохранятся.")) {
-                            voidExpense(expense.id, "Аннулирование из реестра").catch(error=>toast({title:"Не аннулировано",description:String(error),variant:"destructive"}));
-                            toast({ title: "Расход аннулирован" });
+                            voidExpense(expense.id, "Аннулирование из реестра")
+                              .then(() => toast({ title: "Расход аннулирован" }))
+                              .catch((error) => toast({ title: "Не аннулировано", description: String(error), variant: "destructive" }));
                           }
                         }}
                       >
@@ -577,7 +583,12 @@ const Expenses = () => {
             })}
           </tbody>
         </table>
+        {!filteredExpenses.length && (
+          <div className="p-6 text-sm text-muted-foreground">Нет записей за выбранный период</div>
+        )}
       </div>
+      </>
+      )}
 
 
       {/* Просмотр */}
