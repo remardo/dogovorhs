@@ -25,13 +25,13 @@ export async function applyVerifiedCore(ctx: MutationCtx, d: Infer<typeof verifi
   if(d.parentInvoiceId && (parent.periodStart!==d.periodStart || parent.periodEnd!==d.periodEnd)) throw new Error("Период детализации не совпадает с начислением");
   if (charge.total !== parent.total && charge.total !== d.serviceTotal) throw new Error("Начисление изменено после сверки");
   if (d.serviceTotal !== parent.total && d.vatRate === undefined) throw new Error("Не указана подтверждённая ставка НДС");
-  // Explicit net source stays intact; tax computed only from the document's rate.
+  // Original net values stay intact; document VAT is allocated proportionally.
   const netSum=roundMoney(d.rows.filter(r=>r.basis==="net").reduce((s,r)=>s+r.value,0));
   let remainingVat=parent.vat;
   const netRows=d.rows.filter(r=>r.basis==="net");
   const rows=d.rows.map(r=>{
-    let vat=r.basis==="net" && d.vatRate!==undefined ? roundMoney(r.value*d.vatRate/100) : 0;
-    if(r.basis==="net" && d.vatRate!==undefined && netSum===parent.amount){
+    let vat=r.basis==="net" && parent.amount>0 ? roundMoney(r.value*parent.vat/parent.amount) : 0;
+    if(r.basis==="net" && parent.amount>0 && netSum===parent.amount){
       if(r===netRows.at(-1))vat=roundMoney(remainingVat);
       remainingVat=roundMoney(remainingVat-vat);
     }
@@ -69,7 +69,7 @@ export async function applyVerifiedCore(ctx: MutationCtx, d: Infer<typeof verifi
       const id=await ctx.db.insert("simCards",{number:r.number,normalizedNumber:r.number,companyId:contract.companyId,operatorId:contract.operatorId,contractId:contract._id,status:"active",type:category,resourceKind,connectionAddress:r.address,iccid:r.iccid,createdAt:Date.now()});
       sim=(await ctx.db.get(id))??undefined;if(sim)sims.push(sim);
     }
-    const vatBasis=r.basis==="net"?(d.vatRate===undefined?"netOnlyVatUnallocated":"computedFromInvoiceRate"):"grossOnlyTaxNotSplit";
+    const vatBasis=r.basis==="net"?"allocatedFromDocumentVat":"grossOnlyTaxNotSplit";
     await ctx.db.insert("expenses",{companyId:contract.companyId,contractId:contract._id,contract:contract.number,operator:invoice.operator,type:category,serviceCategory:category,kind:"allocation",parentExpenseId:charge._id,invoiceId:invoice._id,simCardId:sim?._id,simNumber:r.number||undefined,amount:r.net,vat:r.vat,total:r.value,vatBasis,month,periodKey,periodStart:d.periodStart,periodEnd:d.periodEnd,status:"confirmed",hasDocument:true,description:r.description,sourcePage:r.sourcePage,sourceRowKey:r.key,serviceIdentifier:r.serviceIdentifier||undefined,basis:r.evidence,createdAt:Date.now()});
   }
   if(pending.length||updates)await writeAudit(ctx,{entityType:"invoice",entityId:`${invoice._id}`,action:"verified_original_backfill",reason:"Сверка оригинала PDF",details:{sha256:d.sha256,rows:pending.length,updates}});

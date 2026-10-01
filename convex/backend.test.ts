@@ -86,7 +86,7 @@ describe("verified original backfill", () => {
     await applyVerifiedCore(ctx.mutation,document,false);
     const expenses=await ctx.db.query("expenses").collect();
     expect(sumCharges(expenses)).toBe(122);expect(sumAllocations(expenses)).toBe(122);
-    expect(expenses.filter(e=>e.kind==="allocation").map(e=>e.vatBasis)).toEqual(["computedFromInvoiceRate","computedFromInvoiceRate"]);
+    expect(expenses.filter(e=>e.kind==="allocation").map(e=>e.vatBasis)).toEqual(["allocatedFromDocumentVat","allocatedFromDocumentVat"]);
     expect((await applyVerifiedCore(ctx.mutation,document,false)).allocations).toBe(0);
   });
   it("preserves the original, separates service cost from payable, and is idempotent", async () => {
