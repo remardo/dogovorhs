@@ -19,10 +19,7 @@ const Dashboard = () => {
   // Full range for the period selector; scoped query drives totals, company
   // cards and charts (server aggregates charges only, calendrically sorted).
   const full = useDashboardData({ monthsLimit: 0 });
-  const [period, setPeriod] = React.useState<string | null>(null);
-
-  const latestPeriod = full.periodKeys.length > 0 ? full.periodKeys[full.periodKeys.length - 1] : "";
-  const effectivePeriod = period ?? latestPeriod;
+  const [effectivePeriod, setPeriod] = React.useState(ALL_PERIODS);
   const scoped = useDashboardData(
     effectivePeriod !== ALL_PERIODS && effectivePeriod ? { periodKey: effectivePeriod, monthsLimit: 0 } : { monthsLimit: 0 },
   );
@@ -79,7 +76,7 @@ const Dashboard = () => {
               icon={<FileText className="h-5 w-5" />}
             />
             <StatCard
-              title="SIM-карт всего"
+              title="Номеров и подключений"
               value={scoped.summary.simCards.toString()}
               icon={<Smartphone className="h-5 w-5" />}
             />

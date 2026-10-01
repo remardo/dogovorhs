@@ -50,7 +50,8 @@ const RecentContracts = ({ contracts }: Props) => {
             </div>
             
             <p className="text-sm font-medium text-foreground whitespace-nowrap">
-              {(contract.monthlyFee ?? 0).toLocaleString("ru-RU")} ₽/мес
+              {(contract.monthlyFee ?? 0).toLocaleString("ru-RU")} ₽
+              <span className="block text-xs font-normal text-muted-foreground">Учётная сумма</span>
             </p>
           </div>
         ))}

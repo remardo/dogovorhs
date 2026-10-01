@@ -47,7 +47,7 @@ const CompanyCard = ({
           <Smartphone className="h-4 w-4 text-muted-foreground" />
           <div>
             <p className="text-lg font-semibold">{simCards}</p>
-            <p className="text-xs text-muted-foreground">SIM-карт</p>
+            <p className="text-xs text-muted-foreground">номеров и подключений</p>
           </div>
         </div>
         
