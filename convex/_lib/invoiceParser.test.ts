@@ -156,4 +156,12 @@ describe("helpers", () => {
     expect(monthLabelFromPeriod("31.08.2026")).toBe("Август 2026");
     expect(monthLabelFromPeriod("")).toBe("текущий период");
   });
+  it("uses only document tax rates and keeps tax-free totals",()=>{
+    const base="Счет № 12345 от 31.08.2026\nВсего к оплате: 107,00\n";
+    const taxed=parseInvoiceText(base+"НДС 7%");
+    expect(taxed.total).toBe(107);expect(taxed.vat).toBe(7);expect(taxed.vatBasis).toBe("computedFromInvoiceRate");
+    expect(parseInvoiceText(base+"Без НДС").vat).toBe(0);
+    expect(parseInvoiceText(base+"НДС не указан").vatBasis).toBe("unknown");
+    expect(monthLabelFromPeriod("2026-08-31")).toBe("Август 2026");
+  });
 });

@@ -71,7 +71,8 @@ export const remove = mutation({
       .query("simCards")
       .withIndex("by_tariff", (q) => q.eq("tariffId", id))
       .take(1);
-    if (used.length) {
+    const history = (await db.query("expenses").collect()).some(e => e.tariffId === id);
+    if (used.length || history) {
       throw new Error("Нельзя удалить тариф: он используется в SIM-картах");
     }
     await db.delete(id);

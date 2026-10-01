@@ -1,4 +1,5 @@
 import React from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ import {
   convexClient,
   useInvoices,
   useOperators,
+  useExpenses,
   type Id,
   type InvoicePreview,
 } from "@/lib/backend";
@@ -33,13 +35,18 @@ type PendingPreview = {
   companyId: string;
   serviceType: string;
   busy: boolean;
+  kind: "invoice" | "detail";
 };
 
-const SERVICE_TYPES = ["Мобильная связь", "Интернет", "Фиксированная связь", "Прочее"];
+const SERVICE_TYPES = ["Мобильная связь", "Интернет", "Телефония", "Прочее"];
 
 const Invoices = () => {
+  const [params, setParams] = useSearchParams();
+  const { items: expenses } = useExpenses({ includeVoided: true });
   const { items: invoices, contracts, summary, updateInvoice, deleteInvoice, refresh } = useInvoices();
   const { items: operators } = useOperators();
+  const selected = invoices.find(i => i.id === params.get("id"));
+  const [search, setSearch] = React.useState(params.get("q") ?? "");
   const [open, setOpen] = React.useState(false);
   const [files, setFiles] = React.useState<File[]>([]);
   const [defaultOperator, setDefaultOperator] = React.useState("__auto");
@@ -59,7 +66,7 @@ const Invoices = () => {
     }
     setUploading(true);
     try {
-      const next: PendingPreview[] = [];
+
       for (const file of files) {
         const { uploadUrl } = await convexClient.mutation(api.billingImports.requestUpload, {});
         const uploadResponse = await fetch(uploadUrl, {
@@ -75,7 +82,7 @@ const Invoices = () => {
           fileName: file.name,
           text,
         })) as InvoicePreview;
-        next.push({
+        setPending(prev => [...prev, {
           key: `${file.name}-${storageId}`,
           fileName: file.name,
           fileId: String(storageId),
@@ -86,11 +93,11 @@ const Invoices = () => {
               : preview.suggested.operator,
           contractId: preview.suggested.contractId ?? "__none",
           companyId: preview.suggested.companyId ?? "__none",
-          serviceType: "Мобильная связь",
+          serviceType: preview.suggested.serviceType ?? "Прочее",
+          kind: /детализац|расшифровк/i.test(file.name) ? "detail" : "invoice",
           busy: false,
-        });
+        }]);
       }
-      setPending(next);
       setFiles([]);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Ошибка загрузки";
@@ -109,17 +116,17 @@ const Invoices = () => {
     patchPending(item.key, { busy: true });
     try {
       const p = item.preview.parsed;
-      await convexClient.action(api.invoiceActions.apply, {
+      const result = await convexClient.action(api.invoiceActions.apply, {
         fileId: item.fileId as Id<"_storage">,
         fileName: item.fileName,
         operator: item.operator,
-        kind: "invoice",
+        kind: item.kind,
         invoiceNo: p.invoiceNo,
         invoiceDate: p.invoiceDate,
         periodStart: p.periodStart,
         periodEnd: p.periodEnd,
         month: p.month,
-        contractNumber: item.preview.suggested.contractNumber || p.contractNumber,
+        contractNumber: p.contractNumber,
         ...(item.contractId !== "__none" ? { contractId: item.contractId as Id<"contracts"> } : {}),
         ...(item.companyId !== "__none" ? { companyId: item.companyId as Id<"companies"> } : {}),
         amount: p.amount,
@@ -127,10 +134,13 @@ const Invoices = () => {
         total: p.total,
         ...(p.notes.length ? { note: p.notes.join("; ") } : {}),
         serviceType: item.serviceType,
+        ...(p.vatRate !== undefined ? { vatRate: p.vatRate } : {}),
+        ...(p.serviceTotal !== undefined ? { serviceTotal: p.serviceTotal } : {}),
+        ...(p.vatBasis ? { vatBasis: p.vatBasis } : {}),
       });
       setPending((prev) => prev.filter((x) => x.key !== item.key));
       await refresh();
-      toast({ title: "Счёт загружен" });
+      toast({ title: result.status === "needs_review" ? "Документ сохранён, начисление требует сверки" : "Счёт загружен" });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Ошибка применения";
       toast({ title: "Не применён", description: message });
@@ -144,6 +154,7 @@ const Invoices = () => {
   };
 
   const confirmLink = async () => {
+    try {
     if (!linkingId || linkContract === "__none") {
       setLinkingId(null);
       return;
@@ -151,6 +162,7 @@ const Invoices = () => {
     await updateInvoice({ id: linkingId, contractId: linkContract });
     toast({ title: "Счёт соотнесён с договором" });
     setLinkingId(null);
+    } catch(error) { toast({title:"Не сохранено",description:error instanceof Error ? error.message : String(error),variant:"destructive"}); }
   };
 
   return (
@@ -209,6 +221,11 @@ const Invoices = () => {
                     <Button size="sm" disabled={item.busy} onClick={() => applyPending(item)}>
                       {item.busy ? "Применение..." : "Применить"}
                     </Button>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <label className="text-sm">Вид документа<select className="block w-full rounded border bg-background p-2" value={item.kind} onChange={e => patchPending(item.key, {kind: e.target.value as "invoice" | "detail"})}><option value="invoice">Счёт с начислением</option><option value="detail">Детализация без нового начисления</option></select></label>
+                    {(["invoiceNo", "invoiceDate", "contractNumber", "periodStart", "periodEnd", "month"] as const).map(field => <label key={field} className="text-sm">{{invoiceNo:"Номер счёта",invoiceDate:"Дата счёта",contractNumber:"Номер договора",periodStart:"Начало услуг",periodEnd:"Окончание услуг",month:"Период"}[field]}<Input value={item.preview.parsed[field]} onChange={e => patchPending(item.key, {preview:{...item.preview,parsed:{...item.preview.parsed,[field]:e.target.value}}})} /></label>)}
+                    {(["amount", "vat", "total"] as const).map(field => <label key={field} className="text-sm">{{amount:"Без НДС",vat:"НДС",total:"Всего по документу"}[field]}<Input type="number" step="0.01" min="0" value={item.preview.parsed[field]} onChange={e => patchPending(item.key, {preview:{...item.preview,parsed:{...item.preview.parsed,[field]:Number(e.target.value)}}})} /></label>)}
                   </div>
                   <div className="grid gap-2 text-sm md:grid-cols-4">
                     <div>
@@ -302,6 +319,7 @@ const Invoices = () => {
         </div>
       </div>
 
+      <Input aria-label="Поиск счетов" placeholder="Поиск по номеру, файлу, договору, компании" value={search} onChange={e => setSearch(e.target.value)} className="mb-4" />
       <div className="rounded-lg border border-border overflow-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
@@ -316,10 +334,10 @@ const Invoices = () => {
             </tr>
           </thead>
           <tbody>
-            {invoices.map((inv) => (
+            {invoices.filter(i => `${i.invoiceNo} ${i.fileName} ${i.contractNumber} ${i.company}`.toLowerCase().includes(search.toLowerCase())).map((inv) => (
               <tr key={inv.id} className="border-t border-border">
                 <td className="px-3 py-2">
-                  <div className="font-medium">{inv.invoiceNo || "—"}</div>
+                  <Link className="font-medium text-primary hover:underline" to={`?id=${encodeURIComponent(inv.id)}`}>{inv.invoiceNo || inv.fileName}</Link>
                   <div className="text-xs text-muted-foreground">
                     {inv.invoiceDate || ""} · {inv.fileName}
                   </div>
@@ -332,7 +350,7 @@ const Invoices = () => {
                 <td className="px-3 py-2">{inv.month || `${inv.periodStart} — ${inv.periodEnd}`}</td>
                 <td className="px-3 py-2 text-right">{inv.total.toLocaleString("ru-RU")} ₽</td>
                 <td className="px-3 py-2">
-                  {inv.status === "matched" ? (
+                  {inv.status === "void" ? <span className="badge-inactive">Аннулирован</span> : inv.status === "matched" ? (
                     <span className="badge-active">Соотнесён</span>
                   ) : (
                     <span className="badge-inactive">Черновик</span>
@@ -354,9 +372,8 @@ const Invoices = () => {
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        if (window.confirm("Удалить счёт и файл?")) {
-                          deleteInvoice(inv.id);
-                          toast({ title: "Счёт удалён" });
+                        if (window.confirm("Аннулировать счёт? Оригинал и история сохранятся.")) {
+                          deleteInvoice(inv.id).then(() => toast({ title: "Счёт аннулирован" })).catch(error => toast({ title: "Не аннулирован", description: String(error), variant: "destructive" }));
                         }
                       }}
                     >
@@ -371,6 +388,17 @@ const Invoices = () => {
         {!invoices.length && <div className="p-6 text-sm text-muted-foreground">Счета не загружены</div>}
       </div>
 
+      <Dialog open={!!selected} onOpenChange={o => {if(!o){const next=new URLSearchParams(params);next.delete("id");setParams(next);}}}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto"><DialogHeader><DialogTitle>Счёт {selected?.invoiceNo}</DialogTitle><DialogDescription>Оригинал, начисление и детализация за период</DialogDescription></DialogHeader>
+        {selected && <div className="space-y-4"><p>{selected.company} · {selected.operator} · {selected.periodStart} — {selected.periodEnd}</p>
+          <p>По документу: {selected.total.toLocaleString("ru-RU")} ₽ · Услуги: {selected.chargeTotal.toLocaleString("ru-RU")} ₽ · Распределено: {selected.allocatedTotal.toLocaleString("ru-RU")} ₽ · Не распределено: {selected.unallocated.toLocaleString("ru-RU")} ₽</p>
+          {selected.openingBalance !== undefined && <p>Входящий остаток: {selected.openingBalance.toLocaleString("ru-RU")} ₽ · Платежи: {selected.payments?.toLocaleString("ru-RU")} ₽ · К оплате: {(selected.amountDue ?? selected.total).toLocaleString("ru-RU")} ₽</p>}
+          {selected.fileUrl && <a className="text-primary underline" href={selected.fileUrl} target="_blank" rel="noreferrer">Открыть оригинал PDF</a>}
+          {selected.contractId && <p><Link className="text-primary underline" to={`/contracts?id=${selected.contractId}`}>Договор {selected.contractNumber}</Link></p>}
+          {selected.chargeId && <p><Link className="text-primary underline" to={`/expenses?id=${selected.chargeId}`}>Начисление и история изменений</Link></p>}
+          <div className="space-y-2">{expenses.filter(e => e.kind === "allocation" && (e.invoiceId === selected.id || e.parentExpenseId === selected.chargeId)).map(e => <div key={e.id} className="rounded border p-3 text-sm"><Link className="text-primary underline" to={`/expenses?id=${e.id}`}>{e.simNumber || "Услуга"}</Link> · {e.total.toLocaleString("ru-RU")} ₽<p>{e.description || e.type}</p><p className="text-muted-foreground">{e.vatBasis === "allocatedFromDocumentVat" ? "НДС распределён пропорционально исходной сумме из налога документа" : e.vatBasis === "netOnlyVatUnallocated" ? "Без НДС; налог остаётся в начислении" : e.vatBasis === "grossOnlyTaxNotSplit" ? "Включая НДС; налог по строке отдельно не указан" : ""} · Страница {e.sourcePage ?? "—"}</p>{e.simCardId && <Link className="text-primary underline" to={`/sim-cards?id=${e.simCardId}`}>История номера / подключения</Link>}</div>)}</div>
+        </div>}</DialogContent>
+      </Dialog>
       <Dialog open={linkingId !== null} onOpenChange={(o) => !o && setLinkingId(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>

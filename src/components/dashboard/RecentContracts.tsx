@@ -32,7 +32,14 @@ const RecentContracts = ({ contracts }: Props) => {
             
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <p className="font-medium text-foreground">{contract.number}</p>
+                <p className="font-medium text-foreground">
+                  <Link
+                    to={`/contracts?id=${encodeURIComponent(contract.id)}`}
+                    className="hover:underline focus-visible:underline"
+                  >
+                    {contract.number}
+                  </Link>
+                </p>
                 <span className={contract.status === "active" ? "badge-active" : "badge-warning"}>
                   {contract.status === "active" ? "Активен" : "Расторжение"}
                 </span>
@@ -43,7 +50,8 @@ const RecentContracts = ({ contracts }: Props) => {
             </div>
             
             <p className="text-sm font-medium text-foreground whitespace-nowrap">
-              {(contract.monthlyFee ?? 0).toLocaleString("ru-RU")} ₽/мес
+              {(contract.monthlyFee ?? 0).toLocaleString("ru-RU")} ₽
+              <span className="block text-xs font-normal text-muted-foreground">Учётная сумма</span>
             </p>
           </div>
         ))}

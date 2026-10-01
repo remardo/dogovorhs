@@ -1,161 +1,126 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import MainLayout from "@/components/layout/MainLayout";
 import StatCard from "@/components/dashboard/StatCard";
 import CompanyCard from "@/components/dashboard/CompanyCard";
 import ExpenseChart from "@/components/dashboard/ExpenseChart";
 import ServiceTypeChart from "@/components/dashboard/ServiceTypeChart";
 import RecentContracts from "@/components/dashboard/RecentContracts";
-import { FileText, Smartphone, Users, CreditCard, CalendarIcon } from "lucide-react";
+import { ErrorBlock, LoadingBlock } from "@/components/QueryState";
+import { FileText, Smartphone, Users, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDashboardData } from "@/lib/backend";
-import { addDays, format, isAfter, isWithinInterval } from "date-fns";
-import type { DateRange } from "react-day-picker";
+import { periodLabel } from "@/lib/servicePeriod";
+
+const ALL_PERIODS = "__all";
 
 const Dashboard = () => {
-  const dashboard = useDashboardData();
-  const { summary, companies, expensesByMonth, services, recentContracts, months, periods = [] } = dashboard;
+  // Full range for the period selector; scoped query drives totals, company
+  // cards and charts (server aggregates charges only, calendrically sorted).
+  const full = useDashboardData({ monthsLimit: 0 });
+  const [effectivePeriod, setPeriod] = React.useState(ALL_PERIODS);
+  const scoped = useDashboardData(
+    effectivePeriod !== ALL_PERIODS && effectivePeriod ? { periodKey: effectivePeriod, monthsLimit: 0 } : { monthsLimit: 0 },
+  );
 
-  const periodsWithDates =
-    periods.length > 0
-      ? periods
-      : months.map((m, idx) => ({
-          label: m,
-          createdAt: addDays(new Date(), -idx * 30).getTime(),
-        }));
-
-  const [dateRange, setDateRange] = React.useState<DateRange | undefined>(() => {
-    const latest = periodsWithDates[0]?.createdAt;
-    if (!latest) return undefined;
-    const d = new Date(latest);
-    return { from: d, to: d };
-  });
-
-  const filteredPeriods = React.useMemo(() => {
-    if (!dateRange?.from || !dateRange.to) return periodsWithDates;
-    return periodsWithDates.filter((p) =>
-      isWithinInterval(new Date(p.createdAt), { start: dateRange.from!, end: dateRange.to! }),
-    );
-  }, [dateRange, periodsWithDates]);
-
-  const filteredExpenses = React.useMemo(() => {
-    if (!filteredPeriods.length) return expensesByMonth;
-    const allowed = new Set(filteredPeriods.map((p) => p.label));
-    return expensesByMonth.filter((m) => allowed.has(m.month));
-  }, [expensesByMonth, filteredPeriods]);
-
-  const totalExpenses = React.useMemo(() => {
-    if (!filteredExpenses.length) return summary.totalExpenses;
-    return filteredExpenses.reduce(
-      (sum, month) => sum + month.companies.reduce((s, c) => s + c.amount, 0),
-      0,
-    );
-  }, [filteredExpenses, summary.totalExpenses]);
-
-  const selectedLabel = React.useMemo(() => {
-    if (!dateRange?.from || !dateRange.to) return filteredPeriods[0]?.label ?? summary.month;
-    const fromStr = format(dateRange.from, "dd.MM.yyyy");
-    const toStr = format(dateRange.to, "dd.MM.yyyy");
-    return fromStr === toStr ? fromStr : `${fromStr} — ${toStr}`;
-  }, [dateRange, filteredPeriods, summary.month]);
+  const selectedLabel = effectivePeriod !== ALL_PERIODS && effectivePeriod ? periodLabel(effectivePeriod) : "все периоды";
+  const isLoading = full.isLoading || scoped.isLoading;
+  const hasScopeData = scoped.expensesByMonth.some((m) => m.companies.length > 0);
 
   return (
     <MainLayout
       title="Дашборд"
       subtitle="Обзор расходов на связь и интернет холдинга"
       actions={
-        <div className="flex items-center gap-3">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="w-64 justify-start text-left font-normal">
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {selectedLabel}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="p-0 w-auto" side="bottom" align="start" sideOffset={4}>
-              <Calendar
-                mode="range"
-                numberOfMonths={2}
-                selected={dateRange}
-                onSelect={(range) => {
-                  if (range?.from && range.to && isAfter(range.from, addDays(range.to, 365))) {
-                    return;
-                  }
-                  setDateRange(range ?? undefined);
-                }}
-                defaultMonth={dateRange?.from ?? new Date()}
-              />
-              <div className="flex items-center justify-between px-4 pb-3 pt-2 text-xs text-muted-foreground">
-                <span>От 1 дня до 1 года</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDateRange({ from: addDays(new Date(), -30), to: new Date() })}
-                >
-                  Последние 30 дней
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
-          <Button>
-            <CreditCard className="h-4 w-4 mr-2" />
-            Внести расходы
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={effectivePeriod || ALL_PERIODS} onValueChange={(v) => setPeriod(v)}>
+            <SelectTrigger className="w-56" aria-label="Период услуг">
+              <SelectValue placeholder="Период услуг" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_PERIODS}>Все периоды</SelectItem>
+              {full.periodKeys.map((k) => (
+                <SelectItem key={k} value={k}>
+                  {periodLabel(k)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button asChild>
+            <Link to="/expenses">
+              <CreditCard className="h-4 w-4 mr-2" />
+              Внести расходы
+            </Link>
           </Button>
         </div>
       }
     >
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          title="Всего расходов"
-          value={`${totalExpenses.toLocaleString("ru-RU")} ₽`}
-          subtitle={`за ${selectedLabel}`}
-          icon={<CreditCard className="h-5 w-5" />}
-          trend={{ value: 2.3, label: "к прошлому месяцу" }}
-        />
-        <StatCard
-          title="Активных договоров"
-          value={summary.contracts.toString()}
-          icon={<FileText className="h-5 w-5" />}
-          trend={{ value: 0 }}
-        />
-        <StatCard
-          title="Активных SIM-карт"
-          value={summary.simCards.toString()}
-          icon={<Smartphone className="h-5 w-5" />}
-          trend={{ value: 3.2, label: "к прошлому месяцу" }}
-        />
-        <StatCard
-          title="Сотрудников с SIM"
-          value={summary.employeesWithSim.toString()}
-          icon={<Users className="h-5 w-5" />}
-          trend={{ value: 1.5, label: "к прошлому месяцу" }}
-        />
-      </div>
+      {isLoading ? (
+        <LoadingBlock text="Загрузка сводки…" />
+      ) : scoped.error ?? full.error ? (
+        <ErrorBlock message={(scoped.error ?? full.error) as string} />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <StatCard
+              title="Всего расходов"
+              value={`${scoped.summary.scopedTotal.toLocaleString("ru-RU")} ₽`}
+              subtitle={`за ${selectedLabel} (начисления)`}
+              icon={<CreditCard className="h-5 w-5" />}
+            />
+            <StatCard
+              title="Активных договоров"
+              value={scoped.summary.contracts.toString()}
+              subtitle={`всего: ${scoped.summary.contractsTotal}`}
+              icon={<FileText className="h-5 w-5" />}
+            />
+            <StatCard
+              title="Номеров и подключений"
+              value={scoped.summary.simCards.toString()}
+              icon={<Smartphone className="h-5 w-5" />}
+            />
+            <StatCard
+              title="Сотрудников с SIM"
+              value={scoped.summary.employeesWithSim.toString()}
+              subtitle="по фактическим назначениям"
+              icon={<Users className="h-5 w-5" />}
+            />
+          </div>
 
-      {/* Company Cards */}
-      <div className="mb-6">
-        <h2 className="section-header mb-4">Расходы по компаниям</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {companies.map((company) => (
-            <CompanyCard key={company.id} {...company} />
-          ))}
-        </div>
-      </div>
+          <div className="mb-6">
+            <h2 className="section-header mb-4">Расходы по компаниям — {selectedLabel}</h2>
+            {scoped.companies.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                Нет компаний
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {scoped.companies.map((company) => (
+                  <CompanyCard key={company.id} {...company} />
+                ))}
+              </div>
+            )}
+          </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-2">
-          <ExpenseChart data={filteredExpenses} />
-        </div>
-        <div>
-          <ServiceTypeChart data={services} />
-        </div>
-      </div>
+          {!hasScopeData ? (
+            <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground mb-6">
+              Нет начислений за {selectedLabel}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+              <div className="lg:col-span-2">
+                <ExpenseChart data={scoped.expensesByMonth} />
+              </div>
+              <div>
+                <ServiceTypeChart data={scoped.services} />
+              </div>
+            </div>
+          )}
 
-      {/* Recent Contracts */}
-      <RecentContracts contracts={recentContracts} />
+          <RecentContracts contracts={full.recentContracts} />
+        </>
+      )}
     </MainLayout>
   );
 };

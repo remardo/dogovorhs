@@ -1,9 +1,10 @@
 import React from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Filter, MoreHorizontal, Receipt, Eye, Pencil, Upload, Trash2, CalendarIcon } from "lucide-react";
+import { Plus, Search, MoreHorizontal, Receipt, Eye, Pencil, Upload, Trash2, CalendarIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { useCompanies, useContracts, useExpenses, useOperators, type Expense } from "@/lib/backend";
+import { useCompanies, useContracts, useExpenses, useInvoices, useOperators, type Expense } from "@/lib/backend";
 import BillingImportDialog from "@/components/expenses/BillingImportDialog";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -44,16 +45,21 @@ type FormValues = z.infer<typeof formSchema>;
 
 
 const Expenses = () => {
-  const { items: expenses, refreshExpenses, createExpense, updateExpense, deleteExpense } = useExpenses();
+  const [params, setParams] = useSearchParams();
+  const { items: invoices } = useInvoices();
+  const [kindFilter, setKindFilter] = React.useState("charge");
+  const { items: expenses, refreshExpenses, createExpense, updateExpense, voidExpense } = useExpenses({includeVoided:true});
   const { items: companies } = useCompanies();
   const { items: contracts } = useContracts();
   const { items: operators } = useOperators();
   const [open, setOpen] = React.useState(false);
-  const [viewExpense, setViewExpense] = React.useState<Expense | null>(null);
+  const [viewExpenseId,setViewExpenseId]=React.useState<string|null>(null);
+  const viewExpense=expenses.find(x=>x.id===(params.get("id") ?? viewExpenseId)) ?? null;
+  const setViewExpense=(item:Expense|null)=>setViewExpenseId(item?.id??null);
   const [editExpense, setEditExpense] = React.useState<Expense | null>(null);
   const [editOpen, setEditOpen] = React.useState(false);
-  const [search, setSearch] = React.useState("");
-  const [companyFilter, setCompanyFilter] = React.useState("all");
+  const [search, setSearch] = React.useState(params.get("q") ?? "");
+  const [companyFilter, setCompanyFilter] = React.useState(params.get("company") ?? "all");
   const [periodFilter, setPeriodFilter] = React.useState("all");
   const [contractSelect, setContractSelect] = React.useState("__custom");
   const [editContractSelect, setEditContractSelect] = React.useState("__custom");
@@ -101,9 +107,12 @@ const Expenses = () => {
   }, [contractSelect, contracts, form]);
 
   const onSubmit = async (values: FormValues) => {
+    try {
     form.setValue("month", formatRange(createRange));
     await createExpense({
       ...values,
+      contractId: contractSelect !== "__custom" ? contractSelect : undefined,
+      basis: "Ручной ввод",
       total: values.amount + values.vat,
       status: "draft",
       hasDocument: false,
@@ -119,6 +128,7 @@ const Expenses = () => {
       amount: 0,
       vat: 0,
     });
+    } catch(error) { toast({title:"Не сохранено",description:error instanceof Error ? error.message : String(error),variant:"destructive"}); }
   };
 
   const editForm = useForm<FormValues>({
@@ -127,7 +137,7 @@ const Expenses = () => {
 
   React.useEffect(() => {
     if (!editExpense) return;
-    const matched = contracts.find((c) => c.number === editExpense.contract);
+    const matched = contracts.find((c) => c.id === editExpense.contractId || (c.number === editExpense.contract && c.companyId === editExpense.companyId && c.operator === editExpense.operator));
     setEditContractSelect(matched ? matched.id : "__custom");
     editForm.reset({
       contract: editExpense.contract,
@@ -154,6 +164,7 @@ const Expenses = () => {
 
 
   const onEditSubmit = async (values: FormValues) => {
+    try {
     if (!editExpense) return;
     editForm.setValue("month", formatRange(editRange, editExpense.month));
     await updateExpense({
@@ -165,6 +176,7 @@ const Expenses = () => {
     });
     toast({ title: "Расход обновлен" });
     setEditOpen(false);
+    } catch(error) { toast({title:"Не сохранено",description:error instanceof Error ? error.message : String(error),variant:"destructive"}); }
   };
 
   const filteredExpenses = React.useMemo(() => {
@@ -175,9 +187,9 @@ const Expenses = () => {
         exp.operator.toLowerCase().includes(search.toLowerCase());
       const matchesCompany = companyFilter === "all" || exp.companyId === companyFilter;
       const matchesPeriod = periodFilter === "all" || exp.month === periodFilter;
-      return matchesSearch && matchesCompany && matchesPeriod;
+      return matchesSearch && matchesCompany && matchesPeriod && (kindFilter === "all" || (kindFilter === "void" ? exp.voided : !exp.voided && exp.kind === kindFilter));
     });
-  }, [expenses, search, companyFilter, periodFilter]);
+  }, [expenses, search, companyFilter, periodFilter, kindFilter]);
 
   const contractNameByNumber = React.useMemo(() => {
     const map = new Map<string, string>();
@@ -192,7 +204,7 @@ const Expenses = () => {
   const filteredSummary = React.useMemo(() => {
     return filteredExpenses.reduce(
       (acc, item) => {
-        acc.total += item.total;
+        if (item.kind !== "allocation" && !item.voided && item.status !== "cancelled" && item.status !== "draft") acc.total += item.total;
         return acc;
       },
       { total: 0 },
@@ -467,9 +479,7 @@ const Expenses = () => {
           </SelectContent>
         </Select>
 
-        <Button variant="outline" size="icon">
-          <Filter className="h-4 w-4" />
-        </Button>
+
       </div>
 
       {/* Summary cards */}
@@ -484,8 +494,9 @@ const Expenses = () => {
         </div>
       </div>
 
+      <label className="block text-sm my-4">Показывать<select className="ml-3 rounded border bg-background p-2" value={kindFilter} onChange={e=>setKindFilter(e.target.value)}><option value="charge">Начисления</option><option value="allocation">Детализация по номерам и услугам</option><option value="all">Начисления и детализация</option><option value="void">Аннулированные записи</option></select></label>
       {/* Table */}
-      <div className="stat-card p-0 overflow-hidden">
+      <div className="stat-card p-0 overflow-x-auto">
         <table className="data-table">
           <thead>
             <tr>
@@ -506,14 +517,14 @@ const Expenses = () => {
               <tr
                 key={expense.id}
                 className="cursor-pointer"
-                onClick={() => setViewExpense(expense)}
+                onClick={() => {setViewExpense(expense);setParams({id:expense.id});}}
               >
                 <td>
                   <div className="flex items-center gap-3">
                     <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
                       <Receipt className="h-4 w-4 text-warning" />
                     </div>
-                    <span className="font-medium">{primaryLabel}</span>
+                    <Link className="font-medium text-primary hover:underline" to={`?id=${expense.id}`}>{primaryLabel === "-" ? expense.contract || expense.type : primaryLabel}</Link>
                   </div>
                 </td>
                 <td>{expense.company}</td>
@@ -549,9 +560,9 @@ const Expenses = () => {
                         <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
                         onSelect={() => {
-                          if (window.confirm("Удалить расход?")) {
-                            deleteExpense(expense.id);
-                            toast({ title: "Расход удален" });
+                          if (window.confirm("Аннулировать расход? История и оригинал сохранятся.")) {
+                            voidExpense(expense.id, "Аннулирование из реестра").catch(error=>toast({title:"Не аннулировано",description:String(error),variant:"destructive"}));
+                            toast({ title: "Расход аннулирован" });
                           }
                         }}
                       >
@@ -568,15 +579,25 @@ const Expenses = () => {
         </table>
       </div>
 
+
       {/* Просмотр */}
-      <Dialog open={!!viewExpense} onOpenChange={(open) => !open && setViewExpense(null)}>
+      <Dialog open={!!viewExpense} onOpenChange={(open) => !open && (setViewExpense(null),setParams(prev => {const next=new URLSearchParams(prev);next.delete("id");return next;}))}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Просмотр расхода</DialogTitle>
-            <DialogDescription>Исходные данные по расходу.</DialogDescription>
+            <DialogDescription>Начисление, основание и детализация расходов.</DialogDescription>
           </DialogHeader>
           {viewExpense && (
             <div className="space-y-3 text-sm">
+              <p>{viewExpense.kind === "allocation" ? "Строка детализации (уже включена в начисление)" : "Начисление"} · {viewExpense.voided ? "Аннулировано" : viewExpense.status}</p>
+              <p>{viewExpense.description}</p><p className="text-muted-foreground">{viewExpense.vatBasis === "allocatedFromDocumentVat" ? "НДС распределён пропорционально исходной сумме из налога документа" : viewExpense.vatBasis === "netOnlyVatUnallocated" ? "Сумма без НДС; налог остаётся в начислении" : viewExpense.vatBasis === "grossOnlyTaxNotSplit" ? "Сумма с НДС; разбивка налога в оригинале не указана" : viewExpense.vatBasis === "computedFromInvoiceRate" ? "НДС вычислен по ставке документа" : ""}</p>
+              {viewExpense.invoiceId && <p><Link className="text-primary underline" to={`/invoices?id=${viewExpense.invoiceId}`}>Счёт и оригинал PDF</Link> · Страница {viewExpense.sourcePage ?? "—"}</p>}
+              {invoices.find(i=>i.id===viewExpense.invoiceId)?.fileUrl && <p><a className="text-primary underline" target="_blank" rel="noreferrer" href={`${invoices.find(i=>i.id===viewExpense.invoiceId)?.fileUrl}#page=${viewExpense.sourcePage ?? 1}`}>Открыть страницу оригинала</a></p>}
+              {viewExpense.contractId && <p><Link className="text-primary underline" to={`/contracts?id=${viewExpense.contractId}`}>История договора</Link></p>}
+              {viewExpense.simCardId && <p><Link className="text-primary underline" to={`/sim-cards?id=${viewExpense.simCardId}`}>История номера / подключения</Link></p>}
+              {viewExpense.parentExpenseId && <p><Link className="text-primary underline" to={`?id=${viewExpense.parentExpenseId}`}>Начисление-основание</Link></p>}
+              <p>{viewExpense.basis}</p>
+              {expenses.filter(e=>e.parentExpenseId===viewExpense.id).map(e=><p key={e.id}><Link className="text-primary underline" to={`?id=${e.id}`}>{e.simNumber || e.description || e.type} · {e.total.toLocaleString("ru-RU")} ₽</Link></p>)}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Договор</span>
                 <span className="font-medium">{viewExpense.contract || "-"}</span>

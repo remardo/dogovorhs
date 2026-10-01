@@ -1,3 +1,4 @@
+import { extractPdfText } from "@/lib/pdfText";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,7 +119,9 @@ const BillingImportDialog = ({ companies, operators, onApplied, onClose }: Billi
         fileName: importFile.name,
       });
       setImportId(String(saved.importId));
-      const preview = await convexClient.action(api.billingImportActions.preview, { id: saved.importId });
+      const preview = importFile.name.toLowerCase().endsWith(".pdf")
+        ? await convexClient.action(api.billingImportActions.previewDetailText, {id:saved.importId as Id<"billingImports">,text:await extractPdfText(importFile)})
+        : await convexClient.action(api.billingImportActions.preview, {id:saved.importId as Id<"billingImports">});
       const sanitizedRows = preview.rows.map((row) => ({
         rowIndex: row.rowIndex,
         phone: row.phone,
