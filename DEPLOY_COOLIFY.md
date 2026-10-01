@@ -1,64 +1,31 @@
-# Deploy на Coolify
+# Deploy
 
-Этот проект использует Vite (фронтенд) и Convex (бекенд). Для деплоя на Coolify нужно настроить переменные окружения для фронта и отдельно для Convex (self-hosted).
+> Фактическое устройство прода: см. `INFRASTRUCTURE.md`. Коротко: на VPS всё поднято
+> **вручную через Docker** (в UI Coolify ресурсов DogovorHS нет), этот файл — про процедуры.
 
-## 1) Frontend в Coolify (вариант с Dockerfile)
+## Backend (Convex self-hosted)
 
-Этот вариант позволяет собирать Vite внутри Coolify и не хранить `dist` в репозитории.
+Процедура деплоя функций, проверки и сида — в `INFRASTRUCTURE.md` (разделы
+«Деплой функций Convex», «Проверка и сид», «Admin-ключ»).
 
-### Что нужно в репозитории
+Кратко: спрятать `.env.local` (иначе CLI ругается на конфликт `CONVEX_DEPLOYMENT`),
+подставить переменные из `.env.coolify`, `npx convex deploy --yes`, вернуть файл.
 
-- `Dockerfile` (в корне)
-- `nginx.conf` (в корне)
+## Frontend
 
-### Настройки в Coolify
+Процедура — в `INFRASTRUCTURE.md` (раздел «Деплой фронта»).
+Ключевое: собирать с `$env:VITE_CONVEX_URL="https://cvdoghs.sorokintech.ru"`
+(`.env.local` содержит dev-URL, который иначе вшьётся в бандл), после `scp`
+делать `chmod -R a+rX` (иначе nginx отдаёт 403).
 
-1. Build Pack: **Dockerfile**
-2. Base Directory: `/`
-3. Укажите переменную для сборки:
-   - Build Arg `VITE_CONVEX_URL` = публичный URL вашего Convex (например `https://convex.your-domain.tld`)
+В репозитории лежат `Dockerfile` + `nginx.conf` под **будущий** переезд фронта
+в Coolify как Dockerfile-приложение (build-arg `VITE_CONVEX_URL`). Пока переезд
+не выполнен — фронт деплоится вручную (см. выше), `Dockerfile` в проде не используется.
 
-Важно: `VITE_CONVEX_URL` читается на этапе сборки. Runtime-переменные не влияют на уже собранную статику.
+## Если мигрировать в Coolify UI
 
-## 2) Convex self-hosted внутри Coolify
-
-Convex разворачивается как отдельный сервис в Coolify. Укажите для него домен/URL и используйте этот URL в `VITE_CONVEX_URL` на фронте.
-
-Минимально нужно:
-1. Развернуть Convex self-hosted как отдельный сервис (по официальной инструкции Convex).
-2. Получить публичный URL для клиента (его ставим в `VITE_CONVEX_URL`).
-3. Сохранить admin key для деплоя функций (используется только для `convex deploy`).
-
-### Переменные окружения Convex сервиса
-
-- `REQUIRE_AUTH=true` - включает обязательную авторизацию на сервере (логика в `convex/_lib/flags.ts`).
-
-Устанавливается в Environment Variables сервиса Convex в Coolify.
-
-## 3) Деплой функций в self-hosted Convex
-
-Для выката функций Convex используйте CLI с переменными окружения:
-
-```sh
-# PowerShell
-$env:CONVEX_SELF_HOSTED_URL="https://convex-admin.your-domain.tld"
-$env:CONVEX_SELF_HOSTED_ADMIN_KEY="self-hosted-convex|..."
-npx convex deploy
-```
-
-Эти переменные должны храниться в секретах (не в репозитории). Их можно задать локально или в CI/CD.
-
-## 4) Что НЕ нужно в Coolify
-
-- `CONVEX_DEPLOYMENT` - используется только локально для `npx convex dev` / `convex deploy`. В продакшне не требуется.
-
-## 5) Проверка после деплоя
-- Откройте приложение: баннер о не настроенном бэкенде не должен появляться.
-
-- Если есть баннер, проверьте `VITE_CONVEX_URL` и что значение доступно на build-этапе.
-
-## Полезные файлы
-
-- `src/lib/backend/client.ts` - читает `VITE_CONVEX_URL`.
-- `.env.local` - локальные dev-переменные (не используются на сервере).
-- `convex/_lib/flags.ts` - флаг `REQUIRE_AUTH`.
+1. Создать приложение из репозитория (Build Pack: Dockerfile, Base Directory `/`),
+   build-arg `VITE_CONVEX_URL=https://cvdoghs.sorokintech.ru`, домен `doghs.sorokintech.ru`.
+2. Backend оставить как есть (ручной контейнер) либо пересоздать сервисом в UI
+   и перевыпустить admin-ключ.
+3. Обновить `INFRASTRUCTURE.md` и удалить этот абзац.

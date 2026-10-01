@@ -1,0 +1,108 @@
+# Инфраструктура DogovorHS (для агентов и людей)
+
+Дата актуализации: 2026-10-01. Единственный источник правды по прод-окружению.
+
+## Карта
+
+| Что | Где | Домен |
+|---|---|---|
+| VPS (Docker, Traefik, Coolify v4) | `201.24.121.181`, SSH-алиас `myvps` (root, `~/.ssh/id_ed25519`, см. `~/.ssh/config`) | `sorokintech.ru` |
+| Convex backend (self-hosted) | контейнер `448s20v2364kajumfugukaz9-181112953100`, volume `448s20v2364kajumfugukaz9-doghs-convex-data` | `https://cvdoghs.sorokintech.ru` |
+| Frontend (nginx static) | контейнер `doghs-web`, файлы `/data/doghs-web/{dist,nginx.conf}` | `https://doghs.sorokintech.ru` (+ алиас `https://dogovor.sorokintech.ru`) |
+| Реверс-прокси | контейнер `coolify-proxy` (Traefik v3.6), сеть `coolify`, TLS через `letsencrypt` | — |
+| Админ-ключи/URL | локальный `.env.coolify` (gitignored, НЕ коммитить) | — |
+| Референсный образец | Coolify-приложение `inmeya-convex` (`/data/coolify/applications/i74ow0ukehb0cm6fc0gslgsq/`, домен `convex.sorokintech.ru`) | — |
+
+ВАЖНО: backend и frontend DogovorHS созданы **вручную через Docker CLI** (копированием паттерна Coolify),
+в базе Coolify (`coolify-db`, таблицы `applications`/`services`) их **нет** — в UI Coolify они не отображаются.
+Управляются только по SSH. Не пытаться «починить» через пересоздание в UI — сначала читать этот файл.
+
+## Convex backend
+
+- Compose-проект: `/data/coolify/applications/448s20v2364kajumfugukaz9/docker-compose.yaml`
+  (образ `ghcr.io/get-convex/convex-backend:latest`, `expose 3210`, сеть `coolify`,
+  volume `...-doghs-convex-data:/convex/data`).
+- Env: `/data/coolify/applications/448s20v2364kajumfugukaz9/.env`
+  (`CONVEX_CLOUD_ORIGIN` = `CONVEX_SITE_ORIGIN` = `https://cvdoghs.sorokintech.ru`, `PORT=3210`, `HOST=0.0.0.0`).
+- Маршрутизация: Traefik-лейблы на контейнере `Host(cvdoghs.sorokintech.ru) -> :3210`
+  (http→https редирект + https с `letsencrypt`). Других backend-портов наружу нет.
+- Данные живут в Docker volume — удаление volume = потеря всех данных.
+
+### Деплой функций Convex
+
+```powershell
+# 1. CLI подхватывает CONVEX_DEPLOYMENT из .env.local и конфликтует с self-hosted —
+#    временно прячем файл, подсовываем ключи из .env.coolify
+Rename-Item -LiteralPath .env.local -NewName .env.local.bak
+Get-Content .env.coolify | ForEach-Object { $pair = $_ -split '=', 2; Set-Item -Path ("env:" + $pair[0]) -Value $pair[1] }
+npx convex deploy --yes
+Rename-Item -LiteralPath .env.local.bak -NewName .env.local
+```
+
+### Проверка и сид
+
+```powershell
+npx convex run dashboard:getSummary "{}"   # те же env-танцы, что выше
+npx convex run seed:run                    # однократно на пустом инстансе (3 компании, 4 договора, ...)
+```
+
+### Admin-ключ
+
+Привязан к инстансу (лежит в его volume). Новый инстанс = старый ключ недействителен
+(`401 BadAdminKey`). Генерация нового:
+
+```sh
+ssh myvps 'docker exec 448s20v2364kajumfugukaz9-181112953100 ./generate_admin_key.sh'
+```
+
+Новый ключ записать в локальный `.env.coolify` (формат `convex-self-hosted|...` или
+`self-hosted-convex|...` — оба принимает CLI). Никуда не коммитить.
+
+### Диагностика
+
+```sh
+ssh myvps 'docker logs --tail 30 448s20v2364kajumfugukaz9-181112953100'
+curl -sk -o /dev/null -w "%{http_code}\n" https://cvdoghs.sorokintech.ru/
+```
+
+- `503` на всё + тело `Service Unavailable` (20 байт) = срабатывает catch-all Traefik
+  (`/data/coolify/proxy/dynamic/default_redirect_503.yaml`): **домен ни к чему не привязан**,
+  сервис отсутствует или убран. Смотреть `docker ps`, лейблы, этот файл.
+- `401 BadAdminKey` = маршрутизация ок, неверный ключ (см. генерацию выше).
+
+## Frontend
+
+- Файлы на VPS: `/data/doghs-web/dist` (сборка), `/data/doghs-web/nginx.conf` (копия `nginx.conf` из репо).
+- Контейнер `doghs-web` (`nginx:alpine`, сеть `coolify`, рестарт `unless-stopped`):
+  `/data/doghs-web/dist:/usr/share/nginx/html:ro`,
+  `/data/doghs-web/nginx.conf:/etc/nginx/conf.d/default.conf:ro`.
+- Traefik-лейблы: `Host(doghs.sorokintech.ru) || Host(dogovor.sorokintech.ru) -> :80`.
+  Полный `docker run ...` — в git-истории нет, при пересоздании собрать по этому описанию
+  (образец лейблов — compose backend'а выше).
+
+### Деплой фронта
+
+```powershell
+# 1. Собрать СТРОГО с продовым URL (.env.local содержит dev-URL и перекроет сборку):
+$env:VITE_CONVEX_URL="https://cvdoghs.sorokintech.ru"; npm run build
+# 2. Проверить, что в бандл вшит прод (должен найтись cvdoghs):
+Select-String -Path dist/assets/*.js -Pattern "cvdoghs" | Select-Object -First 1
+# 3. Залить и поправить права (scp режет права до 700 -> nginx отдаёт 403):
+scp -r dist nginx.conf myvps:/data/doghs-web/
+ssh myvps 'chmod -R a+rX /data/doghs-web'
+# 4. Перезапуск контейнера НЕ нужен (dist подмонтирован volume'ом).
+```
+
+Проверка: `https://doghs.sorokintech.ru/` → 200 (HTML), `/contracts` → 200 (тот же `index.html`, SPA-фолбэк).
+
+## Секреты
+
+- `.env.local` (dev: `CONVEX_DEPLOYMENT`, dev-`VITE_CONVEX_URL`), `.env.coolify` (prod: URL + admin key) —
+  оба в `.gitignore`. В репозиторий попадает только `.env.example` (плейсхолдеры).
+- Утечка admin-ключа = сгенерировать новый (`generate_admin_key.sh`) и обновить `.env.coolify`.
+
+## История (контекст)
+
+До 2026-10-01 сервис `cvdoghs` на VPS отсутствовал (удалён, остались только DNS и TLS-запись
+в `/data/coolify/proxy/acme.json`), данные старого инстанса утрачены. Backend пересоздан с нуля,
+засидирован. Доменов фронта два (`doghs`, `dogovor`), оба ведут на этот VPS.

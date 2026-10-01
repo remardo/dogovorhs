@@ -51,7 +51,9 @@ npm run dev          # в другом: http://localhost:8080
 
 ## Деплой
 
-См. `DEPLOY_COOLIFY.md`: фронт собирается Dockerfile'ом (build-arg `VITE_CONVEX_URL`), Convex — отдельным self-hosted сервисом.
+Устройство прода и процедуры — в `INFRASTRUCTURE.md` (VPS `201.24.121.181`:
+ручной Convex-контейнер + ручной nginx-контейнер, в UI Coolify их нет).
+`DEPLOY_COOLIFY.md` — короткий указатель + план переезда фронта в Coolify.
 
 ## Безопасность
 
